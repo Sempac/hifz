@@ -339,8 +339,13 @@ const rec = {
 
 // pending : mots entendus non reconnus depuis le dernier mot juste
 // heard   : pour un mot compté faux, ce que la reconnaissance a entendu à sa place
-const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {} });
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard } });
+// grace   : tolérance juste après un (re)démarrage du micro (bip sur Android) :
+//           le début de la reprise peut être coupé ou mal compris
+// graceSkip : pendant cette tolérance, des mots manquants sont acceptés (pas après un rappel,
+//             où le mot à retrouver doit vraiment être dit)
+const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, grace: 0, graceSkip: true });
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, grace: st.grace, graceSkip: st.graceSkip });
+const GRACE_WORDS = 2;
 
 function openRecite() {
   const { surah, from, to } = current;
@@ -399,6 +404,14 @@ function advanceOk(st, j) {
   st.pos = j + 1;
   st.extra = 0;
   st.pending = [];
+  st.grace = 0;
+}
+
+// Mots sautés : juste après un bip, 1 ou 2 mots manquants sont des mots coupés
+// par le redémarrage du micro, acceptés sans erreur.
+function skipped(st, p, count) {
+  if (st.grace > 0 && st.graceSkip && count <= GRACE_WORDS) for (let j = p; j < p + count; j++) markOk(st, j);
+  else markSkipped(st, p, count);
 }
 
 // Mots sautés entre p et p+count. Selon le niveau, quelques mots sautés sont souvent
@@ -427,7 +440,7 @@ function align(st, heard) {
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
-    if (exact) { markSkipped(st, p, exact); advanceOk(st, p + exact); continue; }
+    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); continue; }
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
     if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
@@ -438,11 +451,13 @@ function align(st, heard) {
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && same(w, E[p + k].norm)) { skip = k; break; }
     }
-    if (skip) { markSkipped(st, p, skip); advanceOk(st, p + skip); continue; }
+    if (skip) { skipped(st, p, skip); advanceOk(st, p + skip); continue; }
     // l'utilisateur répète un mot déjà récité : on l'ignore
     let repeated = false;
     for (let j = Math.max(0, p - 4); j < p; j++) if (same(w, E[j].norm)) { repeated = true; break; }
     if (repeated) continue;
+    // juste après un bip, un mot mal compris (coupé) est ignoré
+    if (st.grace > 0) { st.grace--; continue; }
     // mot inconnu : au bout de quelques-uns d'affilée, le mot attendu est compté comme erreur
     st.extra++;
     st.pending.push(w);
@@ -584,7 +599,11 @@ function replayAt(i) {
   const resume = () => {
     if (!rec.pausing) return;
     rec.pausing = false;
-    if (rec.listening) { rec.lastProgress = Date.now(); startRecognizer(); }
+    if (rec.listening) {
+      rec.lastProgress = Date.now();
+      startRecognizer();
+      rec.base.graceSkip = false;
+    }
   };
   if (i > 0) {
     $('#heard').textContent = 'Écoutez le rappel, puis continuez au mot suivant.';
@@ -705,8 +724,14 @@ $('#btn-mic').addEventListener('click', () => {
   startListening();
 });
 $('#btn-restart').addEventListener('click', resetRecite);
+// Nouvelle écoute du micro (démarrage, relance automatique, reprise après un rappel) :
+// chacune commence par un bip sur Android, d'où la tolérance sur les premiers mots.
 function newSession() {
   rec.base = clone(rec.committed);
+  rec.base.grace = GRACE_WORDS;
+  rec.base.graceSkip = true;
+  rec.base.extra = 0;
+  rec.base.pending = [];
   rec.offset = 0;
   rec.heardCount = 0;
 }
