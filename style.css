@@ -154,6 +154,7 @@ body {
   height: .9em; vertical-align: middle; line-height: 0; overflow: hidden;
 }
 .w.current { box-shadow: 0 0 0 2px var(--current); }
+.w.say { background: var(--hint-bg); box-shadow: 0 0 0 2px var(--hint); }
 .w.peek { color: var(--muted); background: transparent; height: auto; line-height: inherit; }
 .w.ok { color: var(--ok); }
 .w.bad { color: var(--bad); background: var(--bad-bg); padding: 0 4px; }

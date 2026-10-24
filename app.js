@@ -473,6 +473,7 @@ function acceptWord(i) {
     $('#heard').textContent = `Retenu : « ${heard.join(' ')} » sera accepté pour « ${rec.words[i].text} ».`;
   }
   render();
+  if (!$('#summary').hidden) finish(); // met à jour le score
 }
 
 function score(st) {
@@ -492,27 +493,57 @@ function render() {
   });
   const cur = rec.spans[st.pos];
   if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  if (st.pos >= rec.words.length) finish();
 }
 
 function setShown(st, commit) {
   if (st.pos !== rec.shown.pos) rec.lastProgress = Date.now();
   rec.shown = st;
   if (commit) rec.committed = st;
+  // le rappel passe avant la fin : une erreur sur le dernier mot doit aussi être reprise
+  if (commit && checkReplay(st)) return;
   render();
-  if (commit) checkReplay(st);
+  if (commit && st.pos >= rec.words.length) finish();
 }
 
 // ---------- Reprise sur erreur ----------
-// Sur une erreur, le micro se coupe, l'application fait entendre le dernier mot juste,
-// puis l'utilisateur reprend au mot faux (2 reprises maximum par mot).
-const wordAudio = new Audio();
+// Sur une erreur, le micro se coupe, l'application récite le passage qui précède
+// (depuis le début du verset, 6 mots au plus) jusqu'au dernier mot juste, puis
+// l'utilisateur reprend au mot faux (2 reprises maximum par mot).
+const RAPPEL_MAX = 6;
+let sayAudio = null;
+
+// Indices des mots à réciter avant le mot i.
+function rappelWords(i) {
+  const last = i - 1;
+  let s = last;
+  while (s > 0 && rec.words[s - 1].ayah === rec.words[last].ayah && last - s < RAPPEL_MAX - 1) s--;
+  const out = [];
+  for (let j = s; j <= last; j++) out.push(j);
+  return out;
+}
+
+// Récite les mots un par un (audio mot par mot), en les surlignant.
+function sayWords(idxs, done) {
+  const auds = idxs.map((j) => { const a = new Audio(wordAudioUrl(rec.words[j])); a.preload = 'auto'; return a; });
+  let n = 0;
+  const next = () => {
+    document.querySelectorAll('.w.say').forEach((el) => el.classList.remove('say'));
+    if (!rec.pausing || n >= auds.length) { sayAudio = null; done(); return; }
+    rec.spans[idxs[n]].classList.add('say');
+    sayAudio = auds[n++];
+    sayAudio.onended = next;
+    sayAudio.onerror = next;
+    sayAudio.play().catch(next);
+  };
+  next();
+}
 
 function checkReplay(st) {
-  if (!rec.replay || !rec.listening || rec.pausing) return;
+  if (!rec.replay || !rec.listening || rec.pausing) return false;
   for (let i = 0; i < st.pos; i++) {
-    if (markOf(st, i) === 'bad' && (rec.retries[i] || 0) < 2) { replayAt(i); return; }
+    if (markOf(st, i) === 'bad' && (rec.retries[i] || 0) < 2) { replayAt(i); return true; }
   }
+  return false;
 }
 
 function replayAt(i) {
@@ -538,11 +569,8 @@ function replayAt(i) {
     if (rec.listening) { rec.lastProgress = Date.now(); startRecognizer(); }
   };
   if (i > 0) {
-    $('#heard').textContent = `Erreur. Écoutez « ${rec.words[i - 1].text} » puis reprenez au mot suivant.`;
-    wordAudio.src = wordAudioUrl(rec.words[i - 1]);
-    wordAudio.onended = resume;
-    wordAudio.onerror = resume;
-    wordAudio.play().catch(resume);
+    $('#heard').textContent = 'Écoutez le rappel, puis continuez au mot suivant.';
+    sayWords(rappelWords(i), resume);
   } else {
     $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
     setTimeout(resume, 500);
@@ -634,8 +662,9 @@ function startRecognizer() {
     if (rec.recognition !== r) return;
     rec.committed = rec.shown; // garde le dernier résultat provisoire si aucun final n'est arrivé
     newSession();
-    checkReplay(rec.committed);
-    if (rec.listening && !rec.pausing) { try { r.start(); } catch { stopListening(); } }
+    if (checkReplay(rec.committed)) return;
+    if (rec.committed.pos >= rec.words.length) { render(); finish(); return; }
+    if (rec.listening) { try { r.start(); } catch { stopListening(); } }
   };
   newSession();
   rec.recognition = r;
@@ -645,7 +674,7 @@ function startRecognizer() {
 function stopListening() {
   rec.listening = false;
   rec.pausing = false;
-  wordAudio.pause();
+  if (sayAudio) sayAudio.pause();
   clearInterval(rec.timer);
   if (rec.shown) rec.committed = rec.shown;
   if (rec.recognition) { try { rec.recognition.abort(); } catch { /* déjà arrêté */ } rec.recognition = null; }
