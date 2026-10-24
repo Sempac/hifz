@@ -1,6 +1,6 @@
 // Cache de l'application pour qu'elle s'ouvre sans internet.
-// Changer VERSION à chaque mise à jour des fichiers.
-const VERSION = 'hifz-v3';
+// Changer VERSION quand la liste SHELL change.
+const VERSION = 'hifz-v4';
 const SHELL = [
   './',
   'index.html',
@@ -30,14 +30,20 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   // L'audio est lu en direct, pas mis en cache.
   if (url.hostname === 'everyayah.com') return;
-  e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      // Polices Google : mises en cache au premier chargement.
-      if (res.ok && (url.origin === location.origin || url.hostname.endsWith('gstatic.com') || url.hostname === 'fonts.googleapis.com')) {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(e.request, copy));
-      }
-      return res;
-    }))
-  );
+  const save = (res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(VERSION).then((c) => c.put(e.request, copy));
+    }
+    return res;
+  };
+  if (url.origin === location.origin) {
+    // Fichiers de l'application : toujours la dernière version si le réseau répond,
+    // sinon la copie en cache (utilisation hors ligne).
+    // (no-cache : revérifie auprès du serveur au lieu d'utiliser le cache HTTP de 10 min)
+    e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).then(save).catch(() => caches.match(e.request, { ignoreSearch: true })));
+  } else if (url.hostname.endsWith('gstatic.com') || url.hostname === 'fonts.googleapis.com') {
+    // Polices Google : mises en cache au premier chargement.
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then(save)));
+  }
 });
