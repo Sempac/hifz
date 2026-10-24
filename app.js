@@ -508,9 +508,9 @@ function setShown(st, commit) {
 
 // ---------- Reprise sur erreur ----------
 // Sur une erreur, le micro se coupe, l'application récite le passage qui précède
-// (depuis le début du verset, 6 mots au plus) jusqu'au dernier mot juste, puis
+// (depuis le début du verset, RAPPEL_MAX mots au plus) jusqu'au dernier mot juste, puis
 // l'utilisateur reprend au mot faux (2 reprises maximum par mot).
-const RAPPEL_MAX = 6;
+const RAPPEL_MAX = 2;
 // Un seul lecteur pour tous les rappels : l'iPhone n'autorise un lecteur à jouer seul
 // (sans toucher l'écran) que s'il a déjà joué une fois suite à un toucher.
 const sayEl = new Audio();
