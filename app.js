@@ -36,14 +36,31 @@ function lev(a, b) {
   return prev[n];
 }
 
+// Niveaux de correction (1 = très stricte … 5 = très souple) :
+//   tol      part maximale de lettres différentes pour accepter un mot
+//   extra    nombre de mots inconnus d'affilée avant de compter le mot attendu comme erreur
+//   unsure   nombre de mots sautés d'affilée affichés « non entendu » au lieu d'erreur
+//   shortOk  un petit mot (1-2 lettres) sauté seul est accepté
+const LEVELS = {
+  1: { tol: 0.25, extra: 2, unsure: 0, shortOk: false },
+  2: { tol: 0.34, extra: 2, unsure: 0, shortOk: false },
+  3: { tol: 0.42, extra: 3, unsure: 1, shortOk: false },
+  4: { tol: 0.5, extra: 3, unsure: 1, shortOk: true },
+  5: { tol: 0.58, extra: 4, unsure: 2, shortOk: true },
+};
+
 // Deux mots sont considérés identiques s'ils diffèrent d'au plus une part des lettres
-// (1/3 en mode strict, ~1/2 en mode souple : la reconnaissance vocale n'est pas parfaite).
-// Les mots très courts doivent être exacts.
+// (la reconnaissance vocale n'est pas parfaite). Les mots très courts doivent être exacts.
 function same(a, b) {
   if (a === b) return true;
   if (Math.min(a.length, b.length) <= 2) return false;
-  return lev(a, b) / Math.max(a.length, b.length) <= (rec.strict ? 0.34 : 0.5);
+  return lev(a, b) / Math.max(a.length, b.length) <= LEVELS[rec.level].tol;
 }
+
+// Ce que la reconnaissance comprend pour un mot donné chez cet utilisateur,
+// appris quand il touche un mot marqué faux à tort : { motAttendu: [motsEntendus] }
+const learned = store.get('learned', {});
+const isLearned = (heard, expected) => !!learned[expected]?.includes(heard);
 
 // ---------- Données ----------
 let QURAN = [];
@@ -292,7 +309,8 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const rec = {
   words: [],        // { text, norm } pour chaque mot attendu
   spans: [],
-  strict: store.get('severity', 'soft') === 'strict',
+  level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
+  overrides: new Set(), // mots marqués justes à la main par l'utilisateur
   committed: null,  // état validé (résultats finaux)
   shown: null,      // état affiché (peut inclure un résultat provisoire)
   base: null,       // état au début de la session d'écoute en cours
@@ -305,8 +323,10 @@ const rec = {
   timer: null,
 };
 
-const newState = () => ({ pos: 0, marks: [], extra: 0 });
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra });
+// pending : mots entendus non reconnus depuis le dernier mot juste
+// heard   : pour un mot compté faux, ce que la reconnaissance a entendu à sa place
+const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {} });
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard } });
 
 function openRecite() {
   const { surah, from, to } = current;
@@ -322,6 +342,8 @@ function openRecite() {
       const span = document.createElement('span');
       span.className = 'w';
       span.textContent = t;
+      const idx = rec.words.length;
+      span.addEventListener('click', () => acceptWord(idx));
       box.appendChild(span);
       box.appendChild(document.createTextNode(' '));
       rec.words.push({ text: t, norm: nw });
@@ -345,6 +367,7 @@ function resetRecite() {
   rec.shown = rec.committed;
   newSession();
   rec.peeked.clear();
+  rec.overrides.clear();
   $('#summary').hidden = true;
   $('#heard').textContent = '';
   render();
@@ -352,13 +375,23 @@ function resetRecite() {
 
 function markOk(st, j) { st.marks[j] = rec.peeked.has(j) ? 'hint' : 'ok'; }
 
-// Mots sautés entre p et p+count. En mode souple, un seul mot sauté est souvent
-// un mot que la reconnaissance n'a pas capté (récitation rapide) : il est « non entendu »
-// (ou accepté si c'est un petit mot), pas compté comme erreur.
+// Le mot j est juste : on avance juste après.
+function advanceOk(st, j) {
+  markOk(st, j);
+  st.pos = j + 1;
+  st.extra = 0;
+  st.pending = [];
+}
+
+// Mots sautés entre p et p+count. Selon le niveau, quelques mots sautés sont souvent
+// des mots que la reconnaissance n'a pas captés (récitation rapide) : ils sont
+// « non entendu » (ou acceptés si c'est un petit mot), pas comptés comme erreur.
 function markSkipped(st, p, count) {
+  const L = LEVELS[rec.level];
   for (let j = p; j < p + count; j++) {
-    if (rec.strict || count > 1) st.marks[j] = 'bad';
-    else st.marks[j] = rec.words[j].norm.length <= 2 ? 'ok' : 'unsure';
+    if (count > L.unsure) st.marks[j] = 'bad';
+    else if (count === 1 && L.shortOk && rec.words[j].norm.length <= 2) st.marks[j] = 'ok';
+    else st.marks[j] = 'unsure';
   }
 }
 
@@ -368,55 +401,61 @@ function align(st, heard) {
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
-    if (w === E[p].norm) { markOk(st, p); st.pos++; st.extra = 0; continue; }
+    if (w === E[p].norm || isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
     // (ex. « لم يولد » ne doit pas valider « يلد »)
     let exact = 0;
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
-    if (exact) {
-      markSkipped(st, p, exact);
-      markOk(st, p + exact);
-      st.pos = p + exact + 1;
-      st.extra = 0;
-      continue;
-    }
-    if (same(w, E[p].norm)) { markOk(st, p); st.pos++; st.extra = 0; continue; }
+    if (exact) { markSkipped(st, p, exact); advanceOk(st, p + exact); continue; }
+    if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
-    if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) {
-      markOk(st, p); markOk(st, p + 1); st.pos += 2; st.extra = 0; continue;
-    }
+    if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     // un mot attendu entendu en deux morceaux
-    if (i + 1 < heard.length && same(w + heard[i + 1], E[p].norm)) {
-      markOk(st, p); st.pos++; st.extra = 0; i++; continue;
-    }
+    if (i + 1 < heard.length && same(w + heard[i + 1], E[p].norm)) { advanceOk(st, p); i++; continue; }
     // mot(s) sauté(s) : le mot entendu correspond à un mot un peu plus loin
     let skip = 0;
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && same(w, E[p + k].norm)) { skip = k; break; }
     }
-    if (skip) {
-      markSkipped(st, p, skip);
-      markOk(st, p + skip);
-      st.pos = p + skip + 1;
-      st.extra = 0;
-      continue;
-    }
+    if (skip) { markSkipped(st, p, skip); advanceOk(st, p + skip); continue; }
     // l'utilisateur répète un mot déjà récité : on l'ignore
     let repeated = false;
     for (let j = Math.max(0, p - 4); j < p; j++) if (same(w, E[j].norm)) { repeated = true; break; }
     if (repeated) continue;
-    // mot inconnu : au 2e d'affilée (3e en souple), le mot attendu est compté comme erreur
+    // mot inconnu : au bout de quelques-uns d'affilée, le mot attendu est compté comme erreur
     st.extra++;
-    if (st.extra >= (rec.strict ? 2 : 3)) {
+    st.pending.push(w);
+    if (st.extra >= LEVELS[rec.level].extra) {
       st.marks[p] = 'bad';
+      st.heard[p] = st.pending;
       st.pos++;
       st.extra = 0;
-      if (st.pos < N && same(w, E[st.pos].norm)) { markOk(st, st.pos); st.pos++; }
+      st.pending = [];
+      if (st.pos < N && same(w, E[st.pos].norm)) {
+        st.heard[p] = st.heard[p].slice(0, -1); // w appartenait au mot suivant
+        advanceOk(st, st.pos);
+      }
     }
   }
   return st;
+}
+
+// L'utilisateur touche un mot marqué faux à tort : il devient juste, et ce que
+// la reconnaissance avait entendu à sa place sera accepté la prochaine fois.
+function acceptWord(i) {
+  const m = rec.shown.marks[i];
+  if (i >= rec.shown.pos || rec.overrides.has(i) || (m !== 'bad' && m !== 'unsure')) return;
+  rec.overrides.add(i);
+  const exp = rec.words[i].norm;
+  const heard = (rec.shown.heard[i] || []).filter((h) => h !== exp);
+  if (heard.length) {
+    learned[exp] = [...new Set([...(learned[exp] || []), ...heard])];
+    store.set('learned', learned);
+    $('#heard').textContent = `Retenu : « ${heard.join(' ')} » sera accepté pour « ${rec.words[i].text} ».`;
+  }
+  render();
 }
 
 function score(st) {
@@ -429,7 +468,7 @@ function render() {
   const st = rec.shown;
   rec.spans.forEach((el, i) => {
     let cls = 'w';
-    if (i < st.pos) cls += ' ' + (st.marks[i] || 'ok');
+    if (i < st.pos) cls += ' ' + markOf(st, i);
     else if (i === st.pos && rec.peeked.has(i)) cls += ' peek current';
     else cls += ' hidden' + (i === st.pos ? ' current' : '');
     el.className = cls;
@@ -446,9 +485,11 @@ function setShown(st, commit) {
   render();
 }
 
+const markOf = (st, i) => (rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
+
 function finish() {
   stopListening();
-  const marks = rec.shown.marks;
+  const marks = rec.words.map((_, i) => markOf(rec.shown, i));
   const ok = marks.filter((m) => m === 'ok').length;
   const bad = marks.filter((m) => m === 'bad').length;
   const hint = marks.filter((m) => m === 'hint').length;
@@ -555,10 +596,10 @@ $('#btn-hint').addEventListener('click', () => {
   setShown(st, true);
 });
 
-$('#severity').value = rec.strict ? 'strict' : 'soft';
+$('#severity').value = rec.level;
 $('#severity').addEventListener('change', () => {
-  rec.strict = $('#severity').value === 'strict';
-  store.set('severity', $('#severity').value);
+  rec.level = Number($('#severity').value);
+  store.set('level', rec.level);
 });
 
 // ---------- Démarrage ----------

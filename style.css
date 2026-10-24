@@ -159,6 +159,7 @@ body {
 .w.bad { color: var(--bad); background: var(--bad-bg); padding: 0 4px; }
 .w.hint { color: var(--hint); background: var(--hint-bg); padding: 0 4px; }
 .w.unsure { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 6px; }
+.w.bad, .w.unsure { cursor: pointer; }
 
 .severity {
   border: 1px solid rgb(255 255 255 / .4); border-radius: 8px;
@@ -167,9 +168,11 @@ body {
 .severity option { color: #1d1d1b; }
 
 .rec-bar {
+  position: sticky; bottom: 0; z-index: 2;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin: 0 16px; padding: 10px 12px; border-radius: 12px;
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
   background: var(--bad-bg);
+  box-shadow: 0 -4px 14px rgb(0 0 0 / .12);
 }
 .rec-bar span { flex: 1; min-width: 140px; font-weight: 500; }
 .ayah.recording { background: var(--bad-bg); }

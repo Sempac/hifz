@@ -67,14 +67,14 @@
       <button id="btn-play" class="btn primary">▶ Écouter</button>
       <button id="btn-record" class="btn">⏺ Enregistrer ma récitation</button>
     </div>
+    <p id="learn-msg" class="notice" hidden></p>
+    <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
+    <p class="tip">Touchez un verset pour l'écouter.</p>
     <div id="rec-bar" class="rec-bar" hidden>
       <span id="rec-label"></span>
       <button id="rec-next" class="btn primary">Suivant ▶</button>
       <button id="rec-stop" class="btn ghost">■ Arrêter</button>
     </div>
-    <p id="learn-msg" class="notice" hidden></p>
-    <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
-    <p class="tip">Touchez un verset pour l'écouter.</p>
   </section>
 
   <!-- Écran 3 : réciter -->
@@ -82,9 +82,12 @@
     <header class="bar">
       <button class="back" aria-label="Retour">←</button>
       <h1 id="recite-title"></h1>
-      <select id="severity" class="severity" aria-label="Correction">
-        <option value="soft">Souple</option>
-        <option value="strict">Stricte</option>
+      <select id="severity" class="severity" aria-label="Niveau de correction">
+        <option value="1">Très stricte</option>
+        <option value="2">Stricte</option>
+        <option value="3">Normale</option>
+        <option value="4">Souple</option>
+        <option value="5">Très souple</option>
       </select>
     </header>
     <div id="recite-text" class="mushaf" dir="rtl" lang="ar"></div>
@@ -106,6 +109,7 @@
       <span class="unsure">non entendu</span>
       <span class="hint">avec indice</span>
     </div>
+    <p class="tip">Un mot juste marqué en rouge ? Touchez-le : il sera accepté et retenu.</p>
   </section>
 
   <script src="app.js"></script>
