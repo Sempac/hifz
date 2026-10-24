@@ -407,7 +407,8 @@ function markSkipped(st, p, count) {
   const L = LEVELS[rec.level];
   for (let j = p; j < p + count; j++) {
     if (count > L.unsure) st.marks[j] = 'bad';
-    else if (count === 1 && L.shortOk && rec.words[j].norm.length <= 2) st.marks[j] = 'ok';
+    // avec le rappel, un petit mot oublié doit aussi être repris
+    else if (count === 1 && L.shortOk && !rec.replay && rec.words[j].norm.length <= 2) st.marks[j] = 'ok';
     else st.marks[j] = 'unsure';
   }
 }
@@ -510,7 +511,18 @@ function setShown(st, commit) {
 // (depuis le début du verset, 6 mots au plus) jusqu'au dernier mot juste, puis
 // l'utilisateur reprend au mot faux (2 reprises maximum par mot).
 const RAPPEL_MAX = 6;
+// Un seul lecteur pour tous les rappels : l'iPhone n'autorise un lecteur à jouer seul
+// (sans toucher l'écran) que s'il a déjà joué une fois suite à un toucher.
+const sayEl = new Audio();
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 let sayAudio = null;
+
+// À appeler pendant un toucher (bouton micro) pour autoriser les rappels sur iPhone.
+function unlockSayAudio() {
+  sayEl.onended = sayEl.onerror = null;
+  sayEl.src = SILENCE;
+  sayEl.play().catch(() => { /* rien à jouer */ });
+}
 
 // Indices des mots à réciter avant le mot i.
 function rappelWords(i) {
@@ -524,24 +536,29 @@ function rappelWords(i) {
 
 // Récite les mots un par un (audio mot par mot), en les surlignant.
 function sayWords(idxs, done) {
-  const auds = idxs.map((j) => { const a = new Audio(wordAudioUrl(rec.words[j])); a.preload = 'auto'; return a; });
+  const urls = idxs.map((j) => wordAudioUrl(rec.words[j]));
+  // préchargement pour réduire les blancs entre les mots
+  urls.forEach((u) => { const a = new Audio(); a.preload = 'auto'; a.src = u; });
   let n = 0;
   const next = () => {
     document.querySelectorAll('.w.say').forEach((el) => el.classList.remove('say'));
-    if (!rec.pausing || n >= auds.length) { sayAudio = null; done(); return; }
+    if (!rec.pausing || n >= urls.length) { sayAudio = null; done(); return; }
     rec.spans[idxs[n]].classList.add('say');
-    sayAudio = auds[n++];
-    sayAudio.onended = next;
-    sayAudio.onerror = next;
-    sayAudio.play().catch(next);
+    sayAudio = sayEl;
+    sayEl.onended = next;
+    sayEl.onerror = next;
+    sayEl.src = urls[n++];
+    sayEl.play().catch(next);
   };
   next();
 }
 
+// Un mot faux ou « non entendu » (souvent un oubli) déclenche le rappel.
 function checkReplay(st) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
   for (let i = 0; i < st.pos; i++) {
-    if (markOf(st, i) === 'bad' && (rec.retries[i] || 0) < 2) { replayAt(i); return true; }
+    const m = markOf(st, i);
+    if ((m === 'bad' || m === 'unsure') && (rec.retries[i] || 0) < 2) { replayAt(i); return true; }
   }
   return false;
 }
@@ -681,7 +698,11 @@ function stopListening() {
   $('#btn-mic').classList.remove('on');
 }
 
-$('#btn-mic').addEventListener('click', () => (rec.listening ? stopListening() : startListening()));
+$('#btn-mic').addEventListener('click', () => {
+  if (rec.listening) { stopListening(); return; }
+  unlockSayAudio();
+  startListening();
+});
 $('#btn-restart').addEventListener('click', resetRecite);
 function newSession() {
   rec.base = clone(rec.committed);
