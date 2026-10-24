@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hifz</title>
+  <meta name="theme-color" content="#0f5132">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Hifz">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Écran 1 : choix de la sourate -->
+  <section id="view-home" class="view">
+    <header class="bar">
+      <h1>Hifz</h1>
+    </header>
+    <div class="search">
+      <input id="search" type="search" placeholder="Rechercher une sourate (nom ou numéro)" autocomplete="off">
+    </div>
+    <ul id="surah-list" class="surah-list"></ul>
+  </section>
+
+  <!-- Panneau : choix des versets -->
+  <div id="picker" class="sheet" hidden>
+    <div class="sheet-body">
+      <h2 id="picker-title"></h2>
+      <div class="range">
+        <label>Du verset <input id="from" type="number" min="1" inputmode="numeric"></label>
+        <label>au verset <input id="to" type="number" min="1" inputmode="numeric"></label>
+      </div>
+      <div class="actions">
+        <button id="btn-learn" class="btn">📖 Apprendre</button>
+        <button id="btn-recite" class="btn primary">🎤 Réciter</button>
+      </div>
+      <button id="picker-close" class="btn ghost">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Écran 2 : apprendre (lire + écouter) -->
+  <section id="view-learn" class="view" hidden>
+    <header class="bar">
+      <button class="back" aria-label="Retour">←</button>
+      <h1 id="learn-title"></h1>
+    </header>
+    <div class="toolbar">
+      <select id="reciter" aria-label="Récitateur">
+        <option value="Husary_Muallim_128kbps">Al-Husary (enseignement)</option>
+        <option value="Husary_128kbps">Al-Husary</option>
+        <option value="Minshawy_Murattal_128kbps">Al-Minshawi</option>
+        <option value="Alafasy_128kbps">Al-Afasy</option>
+      </select>
+      <select id="repeat" aria-label="Répétitions par verset">
+        <option value="1">×1</option>
+        <option value="3">×3</option>
+        <option value="5">×5</option>
+        <option value="10">×10</option>
+      </select>
+      <button id="btn-play" class="btn primary">▶ Écouter</button>
+    </div>
+    <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
+    <p class="tip">Touchez un verset pour l'écouter.</p>
+  </section>
+
+  <!-- Écran 3 : réciter -->
+  <section id="view-recite" class="view" hidden>
+    <header class="bar">
+      <button class="back" aria-label="Retour">←</button>
+      <h1 id="recite-title"></h1>
+    </header>
+    <div id="recite-text" class="mushaf" dir="rtl" lang="ar"></div>
+    <div id="no-speech" class="notice" hidden>
+      La reconnaissance vocale n'est pas disponible dans ce navigateur
+      (sur iPhone, utilisez Safari pour cette version).
+      Vous pouvez quand même réciter et toucher <b>Indice</b> pour vérifier mot par mot.
+    </div>
+    <div id="heard" class="heard" dir="rtl" lang="ar"></div>
+    <div id="summary" class="summary" hidden></div>
+    <footer class="controls">
+      <button id="btn-restart" class="btn ghost">↺ Recommencer</button>
+      <button id="btn-mic" class="mic" aria-label="Micro">🎤</button>
+      <button id="btn-hint" class="btn ghost">💡 Indice</button>
+    </footer>
+    <div class="legend">
+      <span class="ok">correct</span>
+      <span class="bad">erreur / oubli</span>
+      <span class="hint">avec indice</span>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

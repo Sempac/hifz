@@ -1,0 +1,199 @@
+:root {
+  --bg: #f7f5ef;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #6b6b66;
+  --line: #e2ded3;
+  --accent: #0f5132;
+  --accent-text: #ffffff;
+  --ok: #157347;
+  --bad: #c62828;
+  --bad-bg: #fde8e8;
+  --hint: #b26a00;
+  --hint-bg: #fff3dc;
+  --hidden: #d9d4c7;
+  --current: #0f5132;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121412;
+    --surface: #1c1f1c;
+    --text: #ecebe6;
+    --muted: #9a9a93;
+    --line: #2e322e;
+    --accent: #3fae78;
+    --accent-text: #08130d;
+    --ok: #5cc98e;
+    --bad: #ff6b6b;
+    --bad-bg: #3a1c1c;
+    --hint: #ffb547;
+    --hint-bg: #3a2a10;
+    --hidden: #3a3f3a;
+    --current: #3fae78;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121412;
+  --surface: #1c1f1c;
+  --text: #ecebe6;
+  --muted: #9a9a93;
+  --line: #2e322e;
+  --accent: #3fae78;
+  --accent-text: #08130d;
+  --ok: #5cc98e;
+  --bad: #ff6b6b;
+  --bad-bg: #3a1c1c;
+  --hint: #ffb547;
+  --hint-bg: #3a2a10;
+  --hidden: #3a3f3a;
+  --current: #3fae78;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+[hidden] { display: none !important; }
+
+.view { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: var(--accent); color: var(--accent-text);
+}
+.bar h1 { margin: 0; font-size: 1.15rem; font-weight: 600; flex: 1; }
+.back {
+  border: 0; background: transparent; color: inherit;
+  font-size: 1.5rem; padding: 0 8px 0 0; cursor: pointer;
+}
+
+.search { padding: 12px 16px; }
+.search input {
+  width: 100%; padding: 12px 14px; font-size: 1rem;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); color: var(--text);
+}
+
+.surah-list { list-style: none; margin: 0; padding: 0 16px 24px; }
+.surah-list li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  cursor: pointer;
+}
+.surah-list .num {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; flex: none;
+  background: var(--bg); color: var(--accent); font-weight: 600; font-size: .9rem;
+}
+.surah-list .info { flex: 1; min-width: 0; }
+.surah-list .en { font-weight: 500; }
+.surah-list .count { color: var(--muted); font-size: .85rem; }
+.surah-list .ar { font-family: "Amiri Quran", serif; font-size: 1.3rem; }
+
+.sheet {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgb(0 0 0 / .45);
+  display: flex; align-items: flex-end;
+}
+.sheet-body {
+  width: 100%; background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 16px calc(env(safe-area-inset-bottom) + 16px);
+}
+.sheet h2 { margin: 0 0 16px; font-size: 1.2rem; }
+.range { display: flex; gap: 12px; margin-bottom: 16px; }
+.range label { flex: 1; color: var(--muted); font-size: .9rem; }
+.range input {
+  display: block; width: 100%; margin-top: 4px; padding: 10px; font-size: 1.1rem;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text);
+}
+.actions { display: flex; gap: 12px; margin-bottom: 8px; }
+.actions .btn { flex: 1; }
+
+.btn {
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 16px; font-size: 1rem; cursor: pointer;
+  background: var(--surface); color: var(--text);
+}
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.ghost { background: transparent; }
+#picker-close { width: 100%; }
+
+.toolbar { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+.toolbar select {
+  padding: 10px; border-radius: 10px; font-size: .95rem;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+}
+.toolbar #reciter { flex: 1; min-width: 0; }
+
+.mushaf {
+  flex: 1;
+  margin: 12px 16px; padding: 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  font-family: "Amiri Quran", serif; font-size: 1.75rem; line-height: 2.6;
+  text-align: justify; text-align-last: right;
+  overflow-wrap: break-word;
+}
+.ayah { cursor: pointer; border-radius: 6px; padding: 0 2px; }
+.ayah.playing { background: var(--hint-bg); }
+.mark { color: var(--accent); font-size: .85em; margin: 0 4px; white-space: nowrap; }
+.tip { color: var(--muted); font-size: .85rem; text-align: center; margin: 0 16px 16px; }
+
+/* Mots en mode récitation */
+.w { display: inline-block; margin: 0 3px; border-radius: 6px; }
+.w.hidden {
+  color: transparent; background: var(--hidden);
+  height: .9em; vertical-align: middle; line-height: 0; overflow: hidden;
+}
+.w.current { box-shadow: 0 0 0 2px var(--current); }
+.w.peek { color: var(--muted); background: transparent; height: auto; line-height: inherit; }
+.w.ok { color: var(--ok); }
+.w.bad { color: var(--bad); background: var(--bad-bg); padding: 0 4px; }
+.w.hint { color: var(--hint); background: var(--hint-bg); padding: 0 4px; }
+
+.heard {
+  min-height: 1.6em; margin: 0 16px; color: var(--muted);
+  font-size: 1.1rem; text-align: center;
+}
+.notice {
+  margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--hint-bg); color: var(--text); font-size: .9rem;
+}
+.summary {
+  margin: 8px 16px; padding: 12px; border-radius: 12px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.summary b { font-size: 1.3rem; }
+
+.controls {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+  background: var(--bg);
+}
+.mic {
+  width: 76px; height: 76px; border-radius: 50%; flex: none;
+  border: 0; font-size: 2rem; cursor: pointer;
+  background: var(--accent); color: var(--accent-text);
+  box-shadow: 0 4px 14px rgb(0 0 0 / .2);
+}
+.mic.on { background: var(--bad); animation: pulse 1.4s infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgb(198 40 40 / .5); }
+  100% { box-shadow: 0 0 0 18px rgb(198 40 40 / 0); }
+}
+.legend {
+  display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;
+  padding: 0 16px calc(env(safe-area-inset-bottom) + 10px); font-size: .8rem;
+}
+.legend .ok { color: var(--ok); }
+.legend .bad { color: var(--bad); }
+.legend .hint { color: var(--hint); }
