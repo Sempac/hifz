@@ -66,10 +66,20 @@ const isLearned = (heard, expected) => !!learned[expected]?.includes(heard);
 let QURAN = [];
 let current = null; // { surah, from, to }
 
+// Position de chaque mot dans l'audio mot par mot de Quran.com, pour les versets
+// où son découpage diffère du nôtre : { "sourate:verset": [positions] }
+let WBW = {};
+
 async function loadData() {
   const res = await fetch('data/quran.json');
   QURAN = await res.json();
   renderList();
+  WBW = await fetch('data/wbw.json').then((r) => r.json()).catch(() => ({}));
+}
+
+function wordAudioUrl(w) {
+  const pos = WBW[`${current.surah.n}:${w.ayah}`]?.[w.k] ?? w.k + 1;
+  return `https://audio.qurancdn.com/wbw/${pad3(current.surah.n)}_${pad3(w.ayah)}_${pad3(pos)}.mp3`;
 }
 
 // ---------- Navigation ----------
@@ -311,6 +321,9 @@ const rec = {
   spans: [],
   level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
   overrides: new Set(), // mots marqués justes à la main par l'utilisateur
+  replay: store.get('replay', true), // reprise sur erreur
+  retries: {},          // mot → nombre de reprises
+  pausing: false,       // micro coupé le temps de faire entendre un mot
   committed: null,  // état validé (résultats finaux)
   shown: null,      // état affiché (peut inclure un résultat provisoire)
   base: null,       // état au début de la session d'écoute en cours
@@ -336,6 +349,7 @@ function openRecite() {
   rec.words = [];
   rec.spans = [];
   for (let n = from; n <= to; n++) {
+    let k = 0;
     for (const t of surah.a[n - 1].split(/\s+/)) {
       const nw = norm(t);
       if (!nw) continue; // signes isolés (ex. ۞)
@@ -346,7 +360,7 @@ function openRecite() {
       span.addEventListener('click', () => acceptWord(idx));
       box.appendChild(span);
       box.appendChild(document.createTextNode(' '));
-      rec.words.push({ text: t, norm: nw });
+      rec.words.push({ text: t, norm: nw, ayah: n, k: k++ });
       rec.spans.push(span);
     }
     const mark = document.createElement('span');
@@ -368,12 +382,15 @@ function resetRecite() {
   newSession();
   rec.peeked.clear();
   rec.overrides.clear();
+  rec.retries = {};
   $('#summary').hidden = true;
   $('#heard').textContent = '';
   render();
 }
 
-function markOk(st, j) { st.marks[j] = rec.peeked.has(j) ? 'hint' : 'ok'; }
+function markOk(st, j) {
+  st.marks[j] = rec.peeked.has(j) ? 'hint' : rec.retries[j] ? 'fixed' : 'ok';
+}
 
 // Le mot j est juste : on avance juste après.
 function advanceOk(st, j) {
@@ -483,6 +500,53 @@ function setShown(st, commit) {
   rec.shown = st;
   if (commit) rec.committed = st;
   render();
+  if (commit) checkReplay(st);
+}
+
+// ---------- Reprise sur erreur ----------
+// Sur une erreur, le micro se coupe, l'application fait entendre le dernier mot juste,
+// puis l'utilisateur reprend au mot faux (2 reprises maximum par mot).
+const wordAudio = new Audio();
+
+function checkReplay(st) {
+  if (!rec.replay || !rec.listening || rec.pausing) return;
+  for (let i = 0; i < st.pos; i++) {
+    if (markOf(st, i) === 'bad' && (rec.retries[i] || 0) < 2) { replayAt(i); return; }
+  }
+}
+
+function replayAt(i) {
+  rec.pausing = true;
+  rec.retries[i] = (rec.retries[i] || 0) + 1;
+  const r = rec.recognition;
+  rec.recognition = null;
+  if (r) { try { r.abort(); } catch { /* déjà arrêté */ } }
+
+  const st = clone(rec.shown);
+  st.pos = i;
+  st.marks.length = i;
+  st.extra = 0;
+  st.pending = [];
+  for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
+  rec.shown = rec.committed = st;
+  newSession();
+  render();
+
+  const resume = () => {
+    if (!rec.pausing) return;
+    rec.pausing = false;
+    if (rec.listening) { rec.lastProgress = Date.now(); startRecognizer(); }
+  };
+  if (i > 0) {
+    $('#heard').textContent = `Erreur. Écoutez « ${rec.words[i - 1].text} » puis reprenez au mot suivant.`;
+    wordAudio.src = wordAudioUrl(rec.words[i - 1]);
+    wordAudio.onended = resume;
+    wordAudio.onerror = resume;
+    wordAudio.play().catch(resume);
+  } else {
+    $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
+    setTimeout(resume, 500);
+  }
 }
 
 const markOf = (st, i) => (rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
@@ -494,8 +558,10 @@ function finish() {
   const bad = marks.filter((m) => m === 'bad').length;
   const hint = marks.filter((m) => m === 'hint').length;
   const unsure = marks.filter((m) => m === 'unsure').length;
+  const fixed = marks.filter((m) => m === 'fixed').length;
   const pct = Math.round((ok / Math.max(1, rec.words.length - unsure)) * 100);
   $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} correct · ❌ ${bad} erreur(s) · 💡 ${hint} indice(s)`
+    + (fixed ? ` · 🔁 ${fixed} corrigé(s) après reprise` : '')
     + (unsure ? ` · ${unsure} non entendu(s)` : '');
   $('#summary').hidden = false;
 }
@@ -534,6 +600,21 @@ function onResult(e) {
 function startListening() {
   if (!SR || rec.listening) return;
   if (rec.committed.pos >= rec.words.length) resetRecite();
+  rec.listening = true;
+  rec.lastProgress = Date.now();
+  $('#btn-mic').classList.add('on');
+  startRecognizer();
+  // après 5 s sans progression, le mot attendu apparaît en gris
+  rec.timer = setInterval(() => {
+    const p = rec.shown.pos;
+    if (!rec.pausing && p < rec.words.length && !rec.peeked.has(p) && Date.now() - rec.lastProgress > 5000) {
+      rec.peeked.add(p);
+      render();
+    }
+  }, 500);
+}
+
+function startRecognizer() {
   const r = new SR();
   r.lang = 'ar-SA';
   // Écoute continue : chaque redémarrage du micro fait un bip sur Android et perd
@@ -541,7 +622,8 @@ function startListening() {
   r.continuous = true;
   r.interimResults = true;
   r.maxAlternatives = 3;
-  r.onresult = onResult;
+  // les événements d'un micro déjà remplacé (après une reprise) sont ignorés
+  r.onresult = (e) => { if (rec.recognition === r) onResult(e); };
   r.onerror = (e) => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       $('#heard').textContent = 'Accès au micro refusé.';
@@ -549,29 +631,23 @@ function startListening() {
     }
   };
   r.onend = () => {
+    if (rec.recognition !== r) return;
     rec.committed = rec.shown; // garde le dernier résultat provisoire si aucun final n'est arrivé
     newSession();
-    if (rec.listening) { try { r.start(); } catch { stopListening(); } }
+    checkReplay(rec.committed);
+    if (rec.listening && !rec.pausing) { try { r.start(); } catch { stopListening(); } }
   };
   newSession();
   rec.recognition = r;
-  rec.listening = true;
-  rec.lastProgress = Date.now();
-  $('#btn-mic').classList.add('on');
   try { r.start(); } catch { stopListening(); }
-  // après 5 s sans progression, le mot attendu apparaît en gris
-  rec.timer = setInterval(() => {
-    const p = rec.shown.pos;
-    if (p < rec.words.length && !rec.peeked.has(p) && Date.now() - rec.lastProgress > 5000) {
-      rec.peeked.add(p);
-      render();
-    }
-  }, 500);
 }
 
 function stopListening() {
   rec.listening = false;
+  rec.pausing = false;
+  wordAudio.pause();
   clearInterval(rec.timer);
+  if (rec.shown) rec.committed = rec.shown;
   if (rec.recognition) { try { rec.recognition.abort(); } catch { /* déjà arrêté */ } rec.recognition = null; }
   $('#btn-mic').classList.remove('on');
 }
@@ -594,6 +670,12 @@ $('#btn-hint').addEventListener('click', () => {
   rec.base = clone(st);
   rec.offset = rec.heardCount;
   setShown(st, true);
+});
+
+$('#opt-replay').checked = rec.replay;
+$('#opt-replay').addEventListener('change', () => {
+  rec.replay = $('#opt-replay').checked;
+  store.set('replay', rec.replay);
 });
 
 $('#severity').value = rec.level;

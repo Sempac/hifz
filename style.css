@@ -157,7 +157,12 @@ body {
 .w.peek { color: var(--muted); background: transparent; height: auto; line-height: inherit; }
 .w.ok { color: var(--ok); }
 .w.bad { color: var(--bad); background: var(--bad-bg); padding: 0 4px; }
-.w.hint { color: var(--hint); background: var(--hint-bg); padding: 0 4px; }
+.w.hint, .w.fixed { color: var(--hint); background: var(--hint-bg); padding: 0 4px; }
+.opt {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 16px 8px; font-size: .9rem; color: var(--text);
+}
+.opt input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .w.unsure { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 6px; }
 .w.bad, .w.unsure { cursor: pointer; }
 
