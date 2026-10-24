@@ -83,12 +83,13 @@ function wordAudioUrl(w) {
 }
 
 // ---------- Navigation ----------
-const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite') };
+const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo') };
 
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
   if (name !== 'learn') { stopAudio(); stopRecording(); }
   if (name !== 'recite') stopListening();
+  if (name !== 'labo' && window.stopLabo) window.stopLabo();
   window.scrollTo(0, 0);
 }
 

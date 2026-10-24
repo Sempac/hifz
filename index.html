@@ -21,6 +21,7 @@
   <section id="view-home" class="view">
     <header class="bar">
       <h1>Hifz</h1>
+      <button id="btn-labo" class="bar-btn">🧪 Labo</button>
     </header>
     <div class="search">
       <input id="search" type="search" placeholder="Rechercher une sourate (nom ou numéro)" autocomplete="off">
@@ -118,6 +119,43 @@
     </footer>
   </section>
 
+  <!-- Écran 4 : Labo (test de la reconnaissance avec voyelles, dans le téléphone) -->
+  <section id="view-labo" class="view" hidden>
+    <header class="bar">
+      <button class="back" aria-label="Retour">←</button>
+      <h1>🧪 Labo voyelles</h1>
+    </header>
+    <p class="notice">
+      Test du modèle Whisper (Tarteel) qui tourne dans le téléphone et écrit les voyelles.
+      Premier chargement : environ 100 Mo (de préférence en Wi-Fi), ensuite gardé dans le téléphone.
+    </p>
+    <div class="labo-row">
+      <select id="labo-surah" aria-label="Sourate"></select>
+      <label>Verset <input id="labo-ayah" type="number" min="1" value="1" inputmode="numeric"></label>
+    </div>
+    <div class="labo-row">
+      <select id="labo-device" aria-label="Calcul">
+        <option value="auto">Calcul : automatique</option>
+        <option value="webgpu">Calcul : carte graphique (WebGPU)</option>
+        <option value="wasm">Calcul : processeur (WASM)</option>
+      </select>
+      <button id="labo-load" class="btn">⬇ Charger le modèle</button>
+    </div>
+    <div id="labo-ref" class="mushaf labo-ref" dir="rtl" lang="ar"></div>
+    <div class="labo-rec">
+      <button id="labo-mic" class="mic" aria-label="Enregistrer" disabled>🎤</button>
+      <p id="labo-status" class="tip">Chargez d'abord le modèle.</p>
+    </div>
+    <div id="labo-result" class="labo-result" hidden>
+      <h3>Ce que le modèle a compris</h3>
+      <div id="labo-heard" class="mushaf" dir="rtl" lang="ar"></div>
+      <h3>Comparaison avec le texte</h3>
+      <div id="labo-compare" class="mushaf" dir="rtl" lang="ar"></div>
+      <p id="labo-stats" class="tip"></p>
+    </div>
+  </section>
+
   <script src="app.js"></script>
+  <script src="labo.js"></script>
 </body>
 </html>

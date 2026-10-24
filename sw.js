@@ -1,11 +1,12 @@
 // Cache de l'application pour qu'elle s'ouvre sans internet.
 // Changer VERSION quand la liste SHELL change.
-const VERSION = 'hifz-v5';
+const VERSION = 'hifz-v6';
 const SHELL = [
   './',
   'index.html',
   'style.css',
   'app.js',
+  'labo.js',
   'manifest.webmanifest',
   'data/quran.json',
   'data/wbw.json',

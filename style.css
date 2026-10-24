@@ -173,6 +173,32 @@ body {
 }
 .severity option { color: #1d1d1b; }
 
+.bar-btn {
+  border: 1px solid rgb(255 255 255 / .4); border-radius: 10px;
+  background: transparent; color: inherit; padding: 6px 10px; font-size: .9rem; cursor: pointer;
+}
+
+/* Labo */
+.labo-row { display: flex; gap: 8px; align-items: center; margin: 0 16px 10px; flex-wrap: wrap; }
+.labo-row select, .labo-row input {
+  padding: 10px; border-radius: 10px; font-size: .95rem;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+}
+.labo-row select { flex: 1; min-width: 0; }
+.labo-row label { color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: 6px; }
+.labo-row input { width: 80px; }
+.labo-ref { flex: none; }
+.labo-rec { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 8px 16px; }
+.labo-result h3 { margin: 12px 16px 0; font-size: .95rem; color: var(--muted); font-weight: 500; }
+.labo-result .mushaf { flex: none; }
+.lw { display: inline-block; margin: 0 4px; text-align: center; line-height: 1.6; vertical-align: top; }
+.lw small { display: block; font-size: .6em; }
+.lw.ok { color: var(--ok); }
+.lw.vowel { color: var(--bad); }
+.lw.vowel small { color: var(--bad); }
+.lw.missing { color: var(--bad); text-decoration: line-through; }
+.lw .bad-letter { background: var(--bad-bg); border-radius: 4px; }
+
 .rec-bar {
   position: sticky; bottom: 0; z-index: 2;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
