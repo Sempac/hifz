@@ -23,10 +23,49 @@
       <h1>Hifz</h1>
       <button id="btn-labo" class="bar-btn">🧪 Labo</button>
     </header>
-    <div class="search">
-      <input id="search" type="search" placeholder="Rechercher une sourate (nom ou numéro)" autocomplete="off">
+    <nav class="tabs">
+      <button class="tab" data-tab="surah">Sourates</button>
+      <button class="tab" data-tab="page">Pages</button>
+      <button class="tab" data-tab="hizb">Hizb</button>
+    </nav>
+    <div id="panel-surah" class="tab-panel">
+      <div class="search">
+        <input id="search" type="search" placeholder="Rechercher une sourate (nom ou numéro)" autocomplete="off">
+      </div>
+      <ul id="surah-list" class="surah-list"></ul>
     </div>
-    <ul id="surah-list" class="surah-list"></ul>
+    <div id="panel-page" class="tab-panel sel-panel" hidden>
+      <p class="sel-help">Pages du mushaf de Médine (1 à 604)</p>
+      <div class="range">
+        <label>De la page <input id="page-from" type="number" min="1" max="604" inputmode="numeric"></label>
+        <label>à la page <input id="page-to" type="number" min="1" max="604" inputmode="numeric"></label>
+      </div>
+      <p id="page-info" class="sel-info"></p>
+      <div class="actions">
+        <button id="page-learn" class="btn">📖 Apprendre</button>
+        <button id="page-recite" class="btn primary">🎤 Réciter</button>
+      </div>
+    </div>
+    <div id="panel-hizb" class="tab-panel sel-panel" hidden>
+      <p class="sel-help">60 hizb (2 par juz), chacun divisé en 4 quarts</p>
+      <div class="range">
+        <label>Hizb <select id="hizb-num"></select></label>
+        <label>Partie
+          <select id="hizb-part">
+            <option value="0">Hizb entier</option>
+            <option value="1">1er quart</option>
+            <option value="2">2e quart</option>
+            <option value="3">3e quart</option>
+            <option value="4">4e quart</option>
+          </select>
+        </label>
+      </div>
+      <p id="hizb-info" class="sel-info"></p>
+      <div class="actions">
+        <button id="hizb-learn" class="btn">📖 Apprendre</button>
+        <button id="hizb-recite" class="btn primary">🎤 Réciter</button>
+      </div>
+    </div>
   </section>
 
   <!-- Panneau : choix des versets -->

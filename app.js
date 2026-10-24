@@ -64,7 +64,10 @@ const isLearned = (heard, expected) => !!learned[expected]?.includes(heard);
 
 // ---------- Données ----------
 let QURAN = [];
-let current = null; // { surah, from, to }
+// Sélection en cours : un titre et la liste des versets (elle peut couvrir plusieurs sourates)
+let current = null; // { title, ayahs: [{ s, a }] }
+const ayahKey = (x) => `${x.s}:${x.a}`;
+const ayahText = (x) => QURAN[x.s - 1].a[x.a - 1];
 
 // Position de chaque mot dans l'audio mot par mot de Quran.com, pour les versets
 // où son découpage diffère du nôtre : { "sourate:verset": [positions] }
@@ -74,12 +77,29 @@ async function loadData() {
   const res = await fetch('data/quran.json');
   QURAN = await res.json();
   renderList();
+  refreshPageInfo();
+  refreshHizbInfo();
   WBW = await fetch('data/wbw.json').then((r) => r.json()).catch(() => ({}));
 }
 
 function wordAudioUrl(w) {
-  const pos = WBW[`${current.surah.n}:${w.ayah}`]?.[w.k] ?? w.k + 1;
-  return `https://audio.qurancdn.com/wbw/${pad3(current.surah.n)}_${pad3(w.ayah)}_${pad3(pos)}.mp3`;
+  const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
+  return `https://audio.qurancdn.com/wbw/${pad3(w.s)}_${pad3(w.ayah)}_${pad3(pos)}.mp3`;
+}
+
+// Tous les versets du Coran dans l'ordre, avec leur page (mushaf de Médine) et leur quart de hizb.
+let ALL = null;
+function allAyahs() {
+  if (!ALL) ALL = QURAN.flatMap((s) => s.a.map((_, i) => ({ s: s.n, a: i + 1, p: s.p[i], q: s.q[i] })));
+  return ALL;
+}
+
+// Titre d'affichage d'un en-tête de sourate dans le texte
+function surahHead(s) {
+  const div = document.createElement('div');
+  div.className = 'surah-head';
+  div.textContent = `سورة ${QURAN[s - 1].name}`;
+  return div;
 }
 
 // ---------- Navigation ----------
@@ -120,6 +140,8 @@ function renderList() {
 $('#search').addEventListener('input', renderList);
 
 // ---------- Choix des versets ----------
+let pickerSurah = null;
+
 function openPicker(s) {
   const saved = store.get('range-' + s.n, null);
   const total = s.a.length;
@@ -127,22 +149,78 @@ function openPicker(s) {
   $('#from').max = $('#to').max = total;
   $('#from').value = saved ? saved[0] : 1;
   $('#to').value = saved ? saved[1] : Math.min(total, total <= 20 ? total : 10);
-  current = { surah: s };
+  pickerSurah = s;
   $('#picker').hidden = false;
 }
 
 function readRange() {
-  const s = current.surah, total = s.a.length;
+  const s = pickerSurah, total = s.a.length;
   let from = Math.max(1, Math.min(total, parseInt($('#from').value, 10) || 1));
   let to = Math.max(1, Math.min(total, parseInt($('#to').value, 10) || total));
   if (to < from) [from, to] = [to, from];
-  current.from = from;
-  current.to = to;
   store.set('range-' + s.n, [from, to]);
   $('#picker').hidden = true;
+  const ayahs = [];
+  for (let a = from; a <= to; a++) ayahs.push({ s: s.n, a });
+  current = { title: `${s.en} ${from}–${to}`, ayahs };
 }
 
-const rangeTitle = () => `${current.surah.en} ${current.from}–${current.to}`;
+const rangeTitle = () => current.title;
+
+// ---------- Choix par pages ou par hizb ----------
+const clampInt = (v, min, max, def) => Math.max(min, Math.min(max, parseInt(v, 10) || def));
+
+function pagesSelection() {
+  let p1 = clampInt($('#page-from').value, 1, 604, 1);
+  let p2 = clampInt($('#page-to').value, 1, 604, p1);
+  if (p2 < p1) [p1, p2] = [p2, p1];
+  return { title: p1 === p2 ? `Page ${p1}` : `Pages ${p1}–${p2}`, ayahs: allAyahs().filter((x) => x.p >= p1 && x.p <= p2) };
+}
+
+const QUART = ['', '1er quart', '2e quart', '3e quart', '4e quart'];
+function hizbSelection() {
+  const h = clampInt($('#hizb-num').value, 1, 60, 1);
+  const part = +$('#hizb-part').value; // 0 = hizb entier, 1-4 = un quart
+  const q1 = (h - 1) * 4 + (part || 1), q2 = part ? q1 : h * 4;
+  return { title: `Hizb ${h}` + (part ? ` · ${QUART[part]}` : ''), ayahs: allAyahs().filter((x) => x.q >= q1 && x.q <= q2) };
+}
+
+// Résumé d'une sélection : du premier au dernier verset
+function selectionInfo(sel) {
+  if (!sel.ayahs.length) return '';
+  const f = sel.ayahs[0], l = sel.ayahs[sel.ayahs.length - 1];
+  const name = (x) => `${QURAN[x.s - 1].en} ${x.a}`;
+  return `De ${name(f)} à ${name(l)} · ${sel.ayahs.length} versets`;
+}
+
+function refreshPageInfo() {
+  store.set('pages', [$('#page-from').value, $('#page-to').value]);
+  $('#page-info').textContent = QURAN.length ? selectionInfo(pagesSelection()) : '';
+}
+function refreshHizbInfo() {
+  store.set('hizb', [$('#hizb-num').value, $('#hizb-part').value]);
+  $('#hizb-info').textContent = QURAN.length ? selectionInfo(hizbSelection()) : '';
+}
+
+for (let h = 1; h <= 60; h++) $('#hizb-num').add(new Option(`Hizb ${h} (juz ${Math.ceil(h / 2)})`, h));
+[$('#page-from').value, $('#page-to').value] = store.get('pages', ['1', '2']);
+[$('#hizb-num').value, $('#hizb-part').value] = store.get('hizb', ['1', '0']);
+['#page-from', '#page-to'].forEach((id) => $(id).addEventListener('input', refreshPageInfo));
+['#hizb-num', '#hizb-part'].forEach((id) => $(id).addEventListener('change', refreshHizbInfo));
+
+$('#page-learn').addEventListener('click', () => { current = pagesSelection(); openLearn(); });
+$('#page-recite').addEventListener('click', () => { current = pagesSelection(); openRecite(); });
+$('#hizb-learn').addEventListener('click', () => { current = hizbSelection(); openLearn(); });
+$('#hizb-recite').addEventListener('click', () => { current = hizbSelection(); openRecite(); });
+
+// Onglets de l'accueil : Sourates / Pages / Hizb
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.id !== 'panel-' + name; });
+  store.set('tab', name);
+}
+document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
+showTab(store.get('tab', 'surah'));
 
 $('#picker-close').addEventListener('click', () => { $('#picker').hidden = true; });
 $('#picker').addEventListener('click', (e) => { if (e.target.id === 'picker') $('#picker').hidden = true; });
@@ -158,18 +236,24 @@ $('#repeat').value = store.get('repeat', '3');
 $('#reciter').addEventListener('change', () => store.set('reciter', $('#reciter').value));
 $('#repeat').addEventListener('change', () => store.set('repeat', $('#repeat').value));
 
+// La sélection couvre-t-elle plusieurs sourates ? (on affiche alors le nom de chaque sourate)
+const multiSurah = () => current.ayahs.some((x) => x.s !== current.ayahs[0].s);
+
 function openLearn() {
-  const { surah, from, to } = current;
   $('#learn-title').textContent = rangeTitle();
   $('#learn-msg').hidden = true;
   const box = $('#learn-text');
   box.innerHTML = '';
-  for (let n = from; n <= to; n++) {
+  const multi = multiSurah();
+  let prevS = 0;
+  for (const x of current.ayahs) {
+    if (multi && x.s !== prevS) box.appendChild(surahHead(x.s));
+    prevS = x.s;
     const span = document.createElement('span');
     span.className = 'ayah';
-    span.dataset.n = n;
-    span.innerHTML = `${surah.a[n - 1]} <span class="mark">﴿${arNum(n)}﴾</span> `;
-    span.addEventListener('click', () => play([n]));
+    span.dataset.k = ayahKey(x);
+    span.innerHTML = `${ayahText(x)} <span class="mark">﴿${arNum(x.a)}﴾</span> `;
+    span.addEventListener('click', () => play([x]));
     box.appendChild(span);
   }
   go('learn');
@@ -177,7 +261,7 @@ function openLearn() {
 
 function play(ayahs) {
   const rep = parseInt($('#repeat').value, 10);
-  playlist = ayahs.flatMap((n) => Array(rep).fill(n));
+  playlist = ayahs.flatMap((x) => Array(rep).fill(x));
   playIdx = 0;
   playNext();
 }
@@ -185,24 +269,24 @@ function play(ayahs) {
 async function playNext() {
   document.querySelectorAll('.ayah.playing').forEach((el) => el.classList.remove('playing'));
   if (playIdx >= playlist.length) { stopAudio(); return; }
-  const n = playlist[playIdx];
+  const x = playlist[playIdx];
   const reciter = $('#reciter').value;
   if (reciter === 'me') {
-    const saved = await idbGet(`${current.surah.n}:${n}`);
+    const saved = await idbGet(ayahKey(x));
     if (!playlist.length) return; // arrêté pendant la lecture de la base
     if (!saved) {
-      showLearnMsg(`Verset ${n} pas encore enregistré avec votre voix.`);
-      while (playIdx < playlist.length && playlist[playIdx] === n) playIdx++;
+      showLearnMsg(`Verset ${QURAN[x.s - 1].en} ${x.a} pas encore enregistré avec votre voix.`);
+      while (playIdx < playlist.length && playlist[playIdx] === x) playIdx++;
       playNext();
       return;
     }
     if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
     audio.src = URL.createObjectURL(new Blob([saved.buf], { type: saved.type }));
   } else {
-    audio.src = `https://everyayah.com/data/${reciter}/${pad3(current.surah.n)}${pad3(n)}.mp3`;
+    audio.src = `https://everyayah.com/data/${reciter}/${pad3(x.s)}${pad3(x.a)}.mp3`;
   }
   audio.play().catch(() => stopAudio());
-  const el = document.querySelector(`.ayah[data-n="${n}"]`);
+  const el = document.querySelector(`.ayah[data-k="${ayahKey(x)}"]`);
   if (el) { el.classList.add('playing'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   $('#btn-play').textContent = '⏸ Pause';
 }
@@ -217,9 +301,7 @@ function stopAudio() {
 audio.addEventListener('ended', () => { playIdx++; playNext(); });
 $('#btn-play').addEventListener('click', () => {
   if (playlist.length) { stopAudio(); return; }
-  const all = [];
-  for (let n = current.from; n <= current.to; n++) all.push(n);
-  play(all);
+  play(current.ayahs);
 });
 
 function showLearnMsg(text) {
@@ -249,7 +331,7 @@ async function idb(mode, fn) {
 const idbGet = (key) => idb('readonly', (s) => s.get(key)).catch(() => undefined);
 const idbPut = (key, val) => idb('readwrite', (s) => s.put(val, key));
 
-const recording = { stream: null, recorder: null, n: 0 };
+const recording = { stream: null, recorder: null, i: 0 }; // i : rang du verset dans la sélection
 
 async function startRecording() {
   stopAudio();
@@ -262,20 +344,21 @@ async function startRecording() {
   $('#learn-msg').hidden = true;
   $('#rec-bar').hidden = false;
   $('#btn-record').disabled = true;
-  recordAyah(current.from);
+  recordAyah(0);
 }
 
-function recordAyah(n) {
+function recordAyah(i) {
   document.querySelectorAll('.ayah.recording').forEach((el) => el.classList.remove('recording'));
-  recording.n = n;
-  const el = document.querySelector(`.ayah[data-n="${n}"]`);
+  recording.i = i;
+  const x = current.ayahs[i];
+  const key = ayahKey(x);
+  const el = document.querySelector(`.ayah[data-k="${key}"]`);
   if (el) { el.classList.add('recording'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-  $('#rec-label').textContent = `⏺ Verset ${n} : récitez puis touchez Suivant`;
-  $('#rec-next').textContent = n >= current.to ? 'Terminer ✔' : 'Suivant ▶';
+  $('#rec-label').textContent = `⏺ ${QURAN[x.s - 1].en} ${x.a} : récitez puis touchez Suivant`;
+  $('#rec-next').textContent = i >= current.ayahs.length - 1 ? 'Terminer ✔' : 'Suivant ▶';
 
   const r = new MediaRecorder(recording.stream);
   const chunks = [];
-  const key = `${current.surah.n}:${n}`;
   r.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   r.onstop = async () => {
     if (r.discard || !chunks.length) return;
@@ -305,13 +388,13 @@ $('#btn-record').addEventListener('click', startRecording);
 $('#rec-stop').addEventListener('click', stopRecording);
 $('#rec-next').addEventListener('click', () => {
   if (recording.recorder) { recording.recorder.stop(); recording.recorder = null; }
-  if (recording.n >= current.to) {
+  if (recording.i >= current.ayahs.length - 1) {
     stopRecording();
     $('#reciter').value = 'me';
     store.set('reciter', 'me');
     showLearnMsg('Récitation enregistrée. « Ma récitation » est sélectionnée : touchez ▶ Écouter.');
   } else {
-    recordAyah(recording.n + 1);
+    recordAyah(recording.i + 1);
   }
 });
 
@@ -348,15 +431,19 @@ const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, 
 const GRACE_WORDS = 2;
 
 function openRecite() {
-  const { surah, from, to } = current;
   $('#recite-title').textContent = rangeTitle();
   const box = $('#recite-text');
   box.innerHTML = '';
   rec.words = [];
   rec.spans = [];
-  for (let n = from; n <= to; n++) {
+  const multi = multiSurah();
+  let prevS = 0;
+  for (const x of current.ayahs) {
+    if (multi && x.s !== prevS) box.appendChild(surahHead(x.s));
+    prevS = x.s;
+    const n = x.a;
     let k = 0;
-    for (const t of surah.a[n - 1].split(/\s+/)) {
+    for (const t of ayahText(x).split(/\s+/)) {
       const nw = norm(t);
       if (!nw) continue; // signes isolés (ex. ۞)
       const span = document.createElement('span');
@@ -366,7 +453,7 @@ function openRecite() {
       span.addEventListener('click', () => acceptWord(idx));
       box.appendChild(span);
       box.appendChild(document.createTextNode(' '));
-      rec.words.push({ text: t, norm: nw, ayah: n, k: k++ });
+      rec.words.push({ text: t, norm: nw, s: x.s, ayah: n, k: k++ });
       rec.spans.push(span);
     }
     const mark = document.createElement('span');
@@ -544,7 +631,8 @@ function unlockSayAudio() {
 function rappelWords(i) {
   const last = i - 1;
   let s = last;
-  while (s > 0 && rec.words[s - 1].ayah === rec.words[last].ayah && last - s < RAPPEL_MAX - 1) s--;
+  const sameAyah = (u, v) => u.s === v.s && u.ayah === v.ayah;
+  while (s > 0 && sameAyah(rec.words[s - 1], rec.words[last]) && last - s < RAPPEL_MAX - 1) s--;
   const out = [];
   for (let j = s; j <= last; j++) out.push(j);
   return out;

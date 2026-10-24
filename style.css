@@ -73,6 +73,27 @@ body {
   font-size: 1.5rem; padding: 0 8px 0 0; cursor: pointer;
 }
 
+.tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
+.tab {
+  flex: 1; padding: 10px; font-size: .95rem; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--text);
+}
+.tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.sel-panel { padding: 16px; }
+.sel-help { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
+.sel-info { min-height: 1.4em; margin: 0 0 12px; font-size: .9rem; }
+.range select {
+  display: block; width: 100%; margin-top: 4px; padding: 10px; font-size: 1rem;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text);
+}
+.surah-head {
+  text-align: center; margin: 12px 0 4px; padding: 4px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  color: var(--accent); font-size: .9em;
+}
+
 .search { padding: 12px 16px; }
 .search input {
   width: 100%; padding: 12px 14px; font-size: 1rem;
