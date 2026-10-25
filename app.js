@@ -604,7 +604,7 @@ function setShown(st, commit) {
   rec.shown = st;
   if (commit) rec.committed = st;
   // le rappel passe avant la fin : une erreur sur le dernier mot doit aussi être reprise
-  if (commit && checkReplay(st)) return;
+  if (checkReplay(st, commit)) return;
   render();
   if (commit && st.pos >= rec.words.length) finish();
 }
@@ -657,12 +657,21 @@ function sayWords(idxs, done) {
   next();
 }
 
-// Un mot faux ou « non entendu » (souvent un oubli) déclenche le rappel.
-function checkReplay(st) {
+// Un mot faux ou « non entendu » (souvent un oubli) déclenche le rappel, seulement s'il est
+// récent (parmi les REPLAY_WINDOW derniers mots) : on ne fait jamais revenir loin en arrière.
+// Sur iPhone, les résultats restent longtemps provisoires : on n'attend pas le résultat
+// définitif si l'erreur est déjà suivie de REPLAY_CONFIRM mots justes.
+const REPLAY_WINDOW = 6;
+const REPLAY_CONFIRM = 2;
+
+function checkReplay(st, final) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
-  for (let i = 0; i < st.pos; i++) {
+  for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
-    if ((m === 'bad' || m === 'unsure') && (rec.retries[i] || 0) < 2) { replayAt(i); return true; }
+    if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= 2) continue;
+    if (!final && st.pos - 1 - i < REPLAY_CONFIRM) continue; // provisoire : pas encore assez sûr
+    replayAt(i);
+    return true;
   }
   return false;
 }
@@ -787,7 +796,7 @@ function startRecognizer() {
     if (rec.recognition !== r) return;
     rec.committed = rec.shown; // garde le dernier résultat provisoire si aucun final n'est arrivé
     newSession();
-    if (checkReplay(rec.committed)) return;
+    if (checkReplay(rec.committed, true)) return;
     if (rec.committed.pos >= rec.words.length) { render(); finish(); return; }
     if (rec.listening) { try { r.start(); } catch { stopListening(); } }
   };
