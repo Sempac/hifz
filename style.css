@@ -291,7 +291,7 @@ body {
   box-shadow: 0 6px 18px rgb(0 0 0 / .35), 0 -2px 10px rgb(0 0 0 / .15);
   pointer-events: none; transition: top .25s ease;
 }
-.lens-in { position: absolute; top: 4px; left: 0; transform-origin: 0 0; transition: transform .25s ease; }
+.lens-in { position: absolute; top: 4px; left: 0; transform-origin: 0 0; }
 .lens-in .mline { line-height: 1.6; }
 .lens-in .hmark { display: none; }
 /* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */

@@ -615,16 +615,20 @@ function renderBook(st) {
 
 // ---------- Loupe ----------
 // Bandeau agrandi posé sur la ligne en cours : la ligne précédente, la ligne en cours et la
-// suivante (2 lignes seulement en haut et en bas de page). Agrandie, une ligne ne tient plus
-// dans la largeur de l'écran : le bandeau glisse le long de la ligne pour garder le mot attendu
-// au centre.
+// suivante (2 lignes seulement en haut et en bas de page). En largeur, la ligne occupe
+// exactement la largeur de l'écran (comme sans les marges) ; le réglage agrandit la hauteur.
 function updateLens(target) {
   const lens = $('#lens');
   const z = rec.lensZoom;
   if (!rec.book || !z || !target || views.recite.hidden || !$('#summary').hidden) { lens.hidden = true; return; }
   const line = target.closest('.mline');
   const lr = line.getBoundingClientRect();
-  if (!lr.height) { lens.hidden = true; return; } // page en train de tourner
+  if (!lr.height) { // page pas encore affichée (ouverture, page qui tourne) : on réessaie
+    lens.hidden = true;
+    clearTimeout(rec.lensRetry);
+    rec.lensRetry = setTimeout(() => { if (rec.lensTarget === target) updateLens(target); }, 200);
+    return;
+  }
   const body = line.parentElement;
   const rows = [line.previousElementSibling, line, line.nextElementSibling].filter(Boolean);
   const cs = getComputedStyle(body);
@@ -636,14 +640,13 @@ function updateLens(target) {
   inner.style.width = contentW + 'px';
   for (const r of rows) { const c = r.cloneNode(true); c.style.width = contentW + 'px'; inner.appendChild(c); }
   lens.hidden = false;
-  const lensH = rows.length * f * 1.6 * z + 8;
+  // largeur : la ligne remplit l'écran (petite marge) ; hauteur : agrandissement choisi
+  const lensW = lens.clientWidth;
+  const sx = (lensW - 12) / contentW;
+  const sy = Math.max(sx, z);
+  const lensH = rows.length * f * 1.6 * sy + 8;
   lens.style.height = lensH + 'px';
-  // horizontal : le mot attendu au centre, sans dépasser les bouts de la ligne
-  const lensW = lens.clientWidth, W = contentW * z;
-  const cur = inner.children[rows.indexOf(line)].querySelector('.current');
-  const cx = cur ? cur.offsetLeft + cur.offsetWidth / 2 : contentW / 2;
-  const tx = W <= lensW ? (lensW - W) / 2 : Math.min(0, Math.max(lensW - W, lensW / 2 - cx * z));
-  inner.style.transform = `translateX(${tx}px) scale(${z})`;
+  inner.style.transform = `translateX(6px) scale(${sx}, ${sy})`;
   // vertical : centré sur la ligne en cours, dans les limites du cadre
   const vr = views.recite.getBoundingClientRect();
   const top = Math.max(vr.top + 46, Math.min(lr.top + lr.height / 2 - lensH / 2, vr.bottom - 42 - lensH));
