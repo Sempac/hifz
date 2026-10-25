@@ -352,6 +352,12 @@ body {
 .sheet .opt { margin: 0 0 12px; }
 .sheet .sheet-body > .btn { width: 100%; margin-top: 6px; }
 .sheet-body { max-height: 85dvh; overflow-y: auto; }
+.mic-log { margin: 12px 0 4px; font-size: .9rem; }
+.mic-log pre {
+  max-height: 40dvh; overflow: auto; margin: 6px 0 0; padding: 8px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--line); font-size: .72rem; line-height: 1.35;
+  white-space: pre-wrap; direction: ltr; text-align: left;
+}
 
 /* mots du livre pendant la récitation */
 .mw.hidden { color: transparent; background: var(--hidden); }

@@ -486,7 +486,9 @@ const rec = {
   flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
-  phrase: store.get('phrase', false),      // écoute par phrase (au lieu de continue)
+  // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
+  phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
+  lastEventAt: 0,       // dernière nouvelle de la reconnaissance (chien de garde iPhone / iPad)
   lensZoom: Number(store.get('lensZoom', 1.6)), // loupe sur la ligne en cours (0 = désactivée)
   lensTarget: null,     // mot attendu dans le livre (suivi par la loupe)
   showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
@@ -670,7 +672,13 @@ $('#btn-recite-view').addEventListener('click', () => {
 });
 
 // ---------- Panneaux de réglages (⚙ en haut à droite du cadre) ----------
-$('#btn-settings').addEventListener('click', () => { $('#settings').hidden = false; });
+$('#btn-settings').addEventListener('click', () => {
+  $('#mic-log').textContent = [
+    `Appareil : ${IOS ? 'iPhone / iPad' : 'autre'} · écoute ${rec.phrase ? 'par phrase' : 'continue'} · niveau ${rec.level}`,
+    navigator.userAgent, '', ...micLines,
+  ].join('\n') || '(vide)';
+  $('#settings').hidden = false;
+});
 $('#learn-gear').addEventListener('click', () => { $('#learn-settings').hidden = false; });
 document.querySelectorAll('.sheet').forEach((sh) => {
   sh.addEventListener('click', (e) => { if (e.target === sh || e.target.closest('.sheet-close')) sh.hidden = true; });
@@ -1277,6 +1285,7 @@ function checkReplay(st, final) {
 }
 
 function replayAt(i) {
+  micLog('rappel au mot ' + (i + 1));
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
   const r = rec.recognition;
@@ -1398,20 +1407,51 @@ function startListening() {
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
+  micT0 = Date.now();
+  micLines.length = 0;
+  micLog('micro lancé');
   startRecognizer();
-  // après 5 s sans progression, le mot attendu apparaît en gris
   rec.timer = setInterval(() => {
+    // après 5 s sans progression, le mot attendu apparaît en gris
     const p = rec.shown.pos;
     if (!rec.pausing && p < rec.words.length && !rec.peeked.has(p) && Date.now() - rec.lastProgress > 5000) {
       rec.peeked.add(p);
       render();
     }
+    // iPhone / iPad : la reconnaissance de Safari cesse parfois d'envoyer des mots sans s'arrêter.
+    // Sans aucune nouvelle d'elle pendant WATCHDOG_MS, on relance une écoute neuve.
+    if (IOS && rec.recognition && !rec.pausing && Date.now() - rec.lastEventAt > WATCHDOG_MS) {
+      micLog('relance (Safari muet depuis ' + Math.round((Date.now() - rec.lastEventAt) / 1000) + ' s)');
+      const r = rec.recognition;
+      rec.recognition = null;
+      try { r.abort(); } catch { /* déjà arrêté */ }
+      rec.committed = rec.shown;
+      startRecognizer();
+    }
   }, 500);
+}
+
+// iPhone et iPad (l'iPad se présente comme un Mac avec écran tactile)
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const WATCHDOG_MS = 6000;
+
+// Journal du micro (diagnostic, visible dans ⚙) : ce que fait la reconnaissance vocale
+const micLines = [];
+let micT0 = Date.now();
+function micLog(text) {
+  micLines.push(`${((Date.now() - micT0) / 1000).toFixed(1).padStart(6)} s  ${text}`);
+  if (micLines.length > 80) micLines.shift();
 }
 
 function startRecognizer() {
   const r = new SR();
   r.lang = 'ar-SA';
+  rec.lastEventAt = Date.now();
+  const seen = () => { if (rec.recognition === r) rec.lastEventAt = Date.now(); };
+  r.onstart = () => { seen(); micLog(`démarrage (${r.continuous ? 'continu' : 'par phrase'})`); };
+  r.onaudiostart = () => { seen(); micLog('micro ouvert'); };
+  r.onspeechstart = () => { seen(); micLog('voix détectée'); };
+  r.onspeechend = () => { seen(); micLog('fin de voix'); };
   // Écoute continue : chaque redémarrage du micro fait un bip sur Android et perd
   // les mots prononcés pendant ce temps. On ne relance que si le navigateur coupe.
   r.continuous = !rec.phrase;
@@ -1419,8 +1459,15 @@ function startRecognizer() {
   r.interimResults = true;
   r.maxAlternatives = 3;
   // les événements d'un micro déjà remplacé (après une reprise) sont ignorés
-  r.onresult = (e) => { if (rec.recognition === r) onResult(e); };
+  r.onresult = (e) => {
+    if (rec.recognition !== r) return;
+    seen();
+    const last = e.results[e.results.length - 1];
+    micLog(`${last.isFinal ? 'définitif' : 'provisoire'} (${e.results.length} seg.) : ${last[0].transcript.trim().split(/\s+/).slice(-4).join(' ')}`);
+    onResult(e);
+  };
   r.onerror = (e) => {
+    micLog('erreur : ' + e.error);
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       $('#heard').textContent = 'Accès au micro refusé.';
       stopListening();
@@ -1428,11 +1475,13 @@ function startRecognizer() {
   };
   r.onend = () => {
     if (rec.recognition !== r) return;
+    micLog('arrêt');
     rec.committed = rec.shown; // garde le dernier résultat provisoire si aucun final n'est arrivé
     newSession();
     if (checkReplay(rec.committed, true)) return;
     if (rec.committed.pos >= rec.words.length) { render(); finish(); return; }
-    if (rec.listening) { try { r.start(); } catch { stopListening(); } }
+    // relance avec une écoute neuve (Safari refuse parfois de redémarrer l'ancienne)
+    if (rec.listening) { rec.recognition = null; startRecognizer(); }
   };
   newSession();
   rec.recognition = r;
@@ -1440,6 +1489,7 @@ function startRecognizer() {
 }
 
 function stopListening() {
+  if (rec.listening) micLog('micro coupé');
   rec.listening = false;
   rec.pausing = false;
   if (sayAudio) sayAudio.pause();
