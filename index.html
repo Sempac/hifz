@@ -11,6 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Hifz">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&display=swap" rel="stylesheet">
@@ -23,6 +24,12 @@
       <h1>Hifz</h1>
       <button id="btn-labo" class="bar-btn">🧪 Labo</button>
     </header>
+    <!-- affiché seulement quand l'application est ouverte dans le navigateur (pas installée) -->
+    <div id="install-banner" class="notice install" hidden>
+      <b>📲 Installer Hifz comme une application</b> (sans la barre du navigateur)
+      <div id="install-how"></div>
+      <button id="install-btn" class="btn primary" hidden>Installer</button>
+    </div>
     <nav class="tabs">
       <button class="tab" data-tab="surah">Sourates</button>
       <button class="tab" data-tab="page">Pages</button>

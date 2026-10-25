@@ -1314,6 +1314,36 @@ $('#severity').addEventListener('change', () => {
   store.set('level', rec.level);
 });
 
+// ---------- Installation comme application ----------
+// Ouverte dans le navigateur (et non depuis l'icône installée), l'application garde la barre
+// d'adresse : on explique comment l'installer.
+(function installBanner() {
+  const installed = matchMedia('(display-mode: standalone)').matches
+    || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+  if (installed) return;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const how = $('#install-how');
+  how.textContent = ios
+    ? "Touchez le bouton Partager (le carré avec une flèche vers le haut), puis « Sur l'écran d'accueil ». Ouvrez ensuite Hifz depuis sa nouvelle icône."
+    : "Menu ⋮ du navigateur → « Installer l'application » (ou « Ajouter à l'écran d'accueil »). Ouvrez ensuite Hifz depuis sa nouvelle icône.";
+  $('#install-banner').hidden = false;
+  // Android (Chrome) : installation directe en un toucher
+  let prompt = null;
+  addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    prompt = e;
+    $('#install-btn').hidden = false;
+  });
+  $('#install-btn').addEventListener('click', async () => {
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') $('#install-banner').hidden = true;
+    prompt = null;
+  });
+  addEventListener('appinstalled', () => { $('#install-banner').hidden = true; });
+})();
+
 // ---------- Démarrage ----------
 loadData();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {

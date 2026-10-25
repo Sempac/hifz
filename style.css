@@ -73,6 +73,9 @@ body {
   font-size: 1.5rem; padding: 0 8px 0 0; cursor: pointer;
 }
 
+.notice.install { margin: 12px 16px 0; line-height: 1.5; }
+.notice.install #install-how { margin-top: 6px; font-size: .9rem; }
+.notice.install .btn { margin-top: 8px; width: 100%; }
 .tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
 .tab {
   flex: 1; padding: 10px; font-size: .95rem; cursor: pointer;
