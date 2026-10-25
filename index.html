@@ -200,6 +200,17 @@
             <option value="5">Très souple</option>
           </select>
         </label>
+        <label class="set-row">🎙 Reconnaissance
+          <select id="engine" aria-label="Reconnaissance">
+            <option value="device">Téléphone (Google / Apple)</option>
+            <option value="server">Serveur Hifz (avec voyelles)</option>
+          </select>
+        </label>
+        <div id="server-row" class="server-row" hidden>
+          <input id="server-url" type="url" placeholder="wss://…/ws" autocomplete="off" spellcheck="false" aria-label="Adresse du serveur">
+          <button id="server-test" class="btn">Tester</button>
+          <p id="server-status" class="sel-help"></p>
+        </div>
         <label class="set-row">🔍 Loupe sur la ligne en cours
           <select id="lens-zoom" aria-label="Loupe">
             <option value="0">Désactivée</option>
@@ -261,6 +272,7 @@
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
   <script src="app.js"></script>
   <script src="mushaf.js"></script>
+  <script src="remote.js"></script>
   <script src="labo.js"></script>
 </body>
 </html>

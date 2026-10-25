@@ -352,6 +352,13 @@ body {
 .sheet .opt { margin: 0 0 12px; }
 .sheet .sheet-body > .btn { width: 100%; margin-top: 6px; }
 .sheet-body { max-height: 85dvh; overflow-y: auto; }
+.server-row { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.server-row input {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; font-size: .95rem;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.server-row .btn { width: auto; margin: 0; }
+.server-row p { flex-basis: 100%; margin: 0; }
 .mic-log { margin: 12px 0 4px; font-size: .9rem; }
 .mic-log pre {
   max-height: 40dvh; overflow: auto; margin: 6px 0 0; padding: 8px; border-radius: 8px;

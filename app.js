@@ -490,6 +490,8 @@ const rec = {
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
   lastEventAt: 0,       // dernière nouvelle de la reconnaissance (chien de garde iPhone / iPad)
   lensZoom: Number(store.get('lensZoom', 1.6)), // loupe sur la ligne en cours (0 = désactivée)
+  engine: store.get('engine', 'device'),   // reconnaissance : 'device' (Google / Apple) ou 'server' (serveur Hifz)
+  serverUrl: store.get('serverUrl', ''),   // adresse WebSocket du serveur Hifz
   lensTarget: null,     // mot attendu dans le livre (suivi par la loupe)
   showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
   lastResultAt: 0,      // heure de la dernière réponse du micro
@@ -515,8 +517,9 @@ const rec = {
 // graceSkip : pendant cette tolérance, des mots manquants sont acceptés (pas après un rappel,
 //             où le mot à retrouver doit vraiment être dit)
 // ins       : mots en trop, par position du mot attendu devant lequel ils ont été ajoutés
-const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, grace: 0, graceSkip: true });
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, grace: st.grace, graceSkip: st.graceSkip });
+// vow       : mots reconnus mais avec une voyelle fausse (serveur Hifz) : ce qui a été entendu
+const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, vow: {}, grace: 0, graceSkip: true });
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, grace: st.grace, graceSkip: st.graceSkip });
 const GRACE_WORDS = 2;
 
 function openRecite() {
@@ -551,8 +554,8 @@ function openRecite() {
     box.appendChild(mark);
     box.appendChild(document.createTextNode(' '));
   }
-  $('#no-speech').hidden = !!SR;
-  $('#btn-mic').disabled = !SR;
+  $('#no-speech').hidden = recognitionAvailable();
+  $('#btn-mic').disabled = !recognitionAvailable();
   rec.textSpans = rec.spans;
   rec.book = false;
   resetRecite();
@@ -895,20 +898,45 @@ function resync(st, p, k) {
   }
 }
 
-// Fait avancer l'état avec les mots entendus.
-function align(st, heard) {
+// Voyelles (serveur Hifz) : un mot reconnu lettre pour lettre mais dont une voyelle diffère
+// est compté faux. La voyelle finale n'est pas exigée quand elle n'est pas prononcée
+// (arrêt, waqf : sukun ou rien), mais une autre voyelle finale (ex. اللَّهِ pour اللَّهُ) est une erreur.
+function vowelError(expected, heardRaw) {
+  if (!heardRaw || !/[ً-ِ]/.test(heardRaw)) return false; // texte sans voyelles
+  const a = laboSlots(expected), b = laboSlots(heardRaw);
+  const pair = alignSlots(a, b);
+  for (let k = 0; k < a.length; k++) {
+    if (!a[k].v || pair[k] === undefined) continue;
+    const hv = b[pair[k]].v;
+    if (k === a.length - 1) {
+      if (!hv) continue; // arrêt : voyelle finale non prononcée
+      if (hv === a[k].v.replace('n', '')) continue; // tanwin prononcé sans le « n » (arrêt)
+    }
+    if (hv !== a[k].v) return true;
+  }
+  return false;
+}
+
+function checkVowels(st, j, heardRaw) {
+  if (!vowelCheck() || st.marks[j] === 'bad') return;
+  if (vowelError(rec.words[j].text, heardRaw)) { st.marks[j] = 'bad'; st.vow[j] = heardRaw; }
+}
+
+// Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
+function align(st, heard, raw = []) {
   const E = rec.words, N = E.length;
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
-    if (w === E[p].norm || isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
+    if (w === E[p].norm) { advanceOk(st, p); checkVowels(st, p, raw[i]); continue; }
+    if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
     // (ex. « لم يولد » ne doit pas valider « يلد »)
     let exact = 0;
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
-    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); continue; }
+    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i]); continue; }
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
     if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
@@ -1299,7 +1327,9 @@ function replayAt(i) {
   st.pending = [];
   for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
   const extraWord = st.ins[i]; // rappel dû à un mot en trop ?
+  const vowelWord = st.vow[i]; // … ou à une voyelle fausse ?
   for (const k of Object.keys(st.ins)) if (Number(k) >= i) delete st.ins[k];
+  for (const k of Object.keys(st.vow)) if (Number(k) >= i) delete st.vow[k];
   rec.shown = rec.committed = st;
   newSession();
   render();
@@ -1316,7 +1346,9 @@ function replayAt(i) {
   if (i > 0) {
     $('#heard').textContent = extraWord
       ? `➕ Mot en trop : « ${extraWord} ». Écoutez le rappel, puis reprenez.`
-      : 'Écoutez le rappel, puis continuez au mot suivant.';
+      : vowelWord
+        ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${rec.words[i].text} ». Écoutez le rappel, puis reprenez.`
+        : 'Écoutez le rappel, puis continuez au mot suivant.';
     sayWords(rappelWords(i), resume);
   } else {
     $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
@@ -1375,8 +1407,9 @@ function onResult(e) {
   let best = null, bestScore = -Infinity, bestText = '', bestCount = 0;
   for (let a = 0; a < nAlt; a++) {
     const text = sessionText(results, a);
-    const heard = text.split(/\s+/).map(norm).filter(Boolean);
-    const st = align(clone(rec.base), heard.slice(rec.offset));
+    const raw = text.split(/\s+/).filter((t) => norm(t)); // mots tels qu'entendus (avec voyelles si serveur)
+    const heard = raw.map(norm);
+    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset));
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
   }
@@ -1401,8 +1434,14 @@ function onResult(e) {
 const LATE_WORDS = 5;   // mots arrivés d'un coup
 const LATE_MS = 2500;   // attente depuis la réponse précédente
 
+// Reconnaissance utilisable : celle du navigateur, ou le serveur Hifz (si une adresse est réglée)
+const recognitionAvailable = () => (rec.engine === 'server' ? !!rec.serverUrl : !!SR);
+
+// Le serveur Hifz renvoie le texte avec les voyelles : on les vérifie (sauf en Très souple)
+const vowelCheck = () => rec.engine === 'server' && rec.level <= 4;
+
 function startListening() {
-  if (!SR || rec.listening) return;
+  if (!recognitionAvailable() || rec.listening) return;
   if (rec.committed.pos >= rec.words.length) resetRecite();
   rec.listening = true;
   rec.lastProgress = Date.now();
@@ -1420,7 +1459,7 @@ function startListening() {
     }
     // iPhone / iPad : la reconnaissance de Safari cesse parfois d'envoyer des mots sans s'arrêter.
     // Sans aucune nouvelle d'elle pendant WATCHDOG_MS, on relance une écoute neuve.
-    if (IOS && rec.recognition && !rec.pausing && Date.now() - rec.lastEventAt > WATCHDOG_MS) {
+    if (IOS && rec.engine !== 'server' && rec.recognition && !rec.pausing && Date.now() - rec.lastEventAt > WATCHDOG_MS) {
       micLog('relance (Safari muet depuis ' + Math.round((Date.now() - rec.lastEventAt) / 1000) + ' s)');
       const r = rec.recognition;
       rec.recognition = null;
@@ -1444,7 +1483,7 @@ function micLog(text) {
 }
 
 function startRecognizer() {
-  const r = new SR();
+  const r = rec.engine === 'server' ? new ServerRecognizer(rec.serverUrl) : new SR();
   r.lang = 'ar-SA';
   rec.lastEventAt = Date.now();
   const seen = () => { if (rec.recognition === r) rec.lastEventAt = Date.now(); };
@@ -1468,6 +1507,11 @@ function startRecognizer() {
   };
   r.onerror = (e) => {
     micLog('erreur : ' + e.error);
+    if (e.error === 'network' && rec.engine === 'server') {
+      $('#heard').textContent = 'Serveur Hifz injoignable : vérifiez l’adresse dans ⚙ (ou repassez sur « Téléphone »).';
+      stopListening();
+      return;
+    }
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       $('#heard').textContent = 'Accès au micro refusé.';
       stopListening();
@@ -1496,6 +1540,7 @@ function stopListening() {
   clearInterval(rec.timer);
   if (rec.shown) rec.committed = rec.shown;
   if (rec.recognition) { try { rec.recognition.abort(); } catch { /* déjà arrêté */ } rec.recognition = null; }
+  if (window.releaseMic) releaseMic(); // micro du mode serveur
   $('#btn-mic').classList.remove('on');
 }
 
