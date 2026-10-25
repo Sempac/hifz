@@ -124,7 +124,6 @@ class ServerRecognizer {
 }
 
 // ---------- Réglage : moteur de reconnaissance et adresse du serveur ----------
-const healthUrl = (wsUrl) => wsUrl.replace(/^ws/, 'http').replace(/\/ws\/?$/, '/');
 
 function applyEngineUi() {
   $('#engine').value = rec.engine;
@@ -140,19 +139,24 @@ $('#engine').addEventListener('change', () => {
   $('#btn-mic').disabled = !recognitionAvailable();
   $('#no-speech').hidden = recognitionAvailable();
 });
-$('#server-url').addEventListener('change', () => {
+$('#server-url').addEventListener('input', () => {
   rec.serverUrl = $('#server-url').value.trim();
   store.set('serverUrl', rec.serverUrl);
+  $('#btn-mic').disabled = !recognitionAvailable();
 });
-$('#server-test').addEventListener('click', async () => {
+// Test par une connexion WebSocket, comme la récitation (une simple requête web serait bloquée
+// par le navigateur, la page de santé du serveur n'autorisant pas les autres sites)
+$('#server-test').addEventListener('click', () => {
   const out = $('#server-status');
+  rec.serverUrl = $('#server-url').value.trim();
+  store.set('serverUrl', rec.serverUrl);
+  if (!/^wss?:\/\//.test(rec.serverUrl)) { out.textContent = '❌ L’adresse doit commencer par wss://'; return; }
   out.textContent = 'Test en cours…';
-  try {
-    const r = await fetch(healthUrl(rec.serverUrl), { cache: 'no-store' });
-    const j = await r.json();
-    out.textContent = j.ok ? `✅ Serveur joignable (calcul : ${j.device === 'cuda' ? 'carte graphique' : 'processeur'})` : '❌ Réponse inattendue';
-  } catch {
-    out.textContent = '❌ Serveur injoignable (adresse, réseau ou serveur éteint ?)';
-  }
+  let ws, done = false;
+  const finish = (msg) => { if (done) return; done = true; out.textContent = msg; try { ws.close(); } catch { /* fermé */ } };
+  const timer = setTimeout(() => finish('❌ Pas de réponse du serveur (adresse, réseau ou serveur éteint ?)'), 8000);
+  try { ws = new WebSocket(rec.serverUrl); } catch { clearTimeout(timer); finish('❌ Adresse invalide'); return; }
+  ws.onopen = () => { clearTimeout(timer); finish('✅ Serveur joignable'); };
+  ws.onerror = () => { clearTimeout(timer); finish('❌ Serveur injoignable (adresse, réseau ou serveur éteint ?)'); };
 });
 applyEngineUi();
