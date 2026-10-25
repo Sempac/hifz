@@ -163,6 +163,8 @@
       Vous pouvez quand même réciter et toucher <b>Indice</b> pour vérifier mot par mot.
     </div>
     <div id="heard" class="heard" dir="rtl" lang="ar"></div>
+    <!-- loupe : la ligne en cours (et ses voisines) agrandie, qui suit la récitation -->
+    <div id="lens" class="lens" hidden><div class="lens-in"></div></div>
     <div id="fab-group" class="fab-group">
       <button id="btn-flag" class="fab red" aria-label="Signaler une faute">✗ <span id="flag-word" dir="rtl" lang="ar"></span></button>
       <button id="btn-validate" class="fab" aria-label="Valider le mot">✓ <span id="fab-word" dir="rtl" lang="ar"></span></button>
@@ -196,6 +198,14 @@
             <option value="3">Normale</option>
             <option value="4">Souple</option>
             <option value="5">Très souple</option>
+          </select>
+        </label>
+        <label class="set-row">🔍 Loupe sur la ligne en cours
+          <select id="lens-zoom" aria-label="Loupe">
+            <option value="0">Désactivée</option>
+            <option value="1.3">×1,3</option>
+            <option value="1.6">×1,6</option>
+            <option value="2">×2</option>
           </select>
         </label>
         <label class="opt"><input type="checkbox" id="opt-replay"> 🔁 Rappel sur erreur : réciter le passage qui précède, puis reprendre</label>

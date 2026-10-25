@@ -113,7 +113,7 @@ function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
   if (name !== 'learn') { stopAudio(); stopRecording(); }
   if (name === 'home' && window.closeMushaf) closeMushaf();
-  if (name !== 'recite') stopListening();
+  if (name !== 'recite') { stopListening(); $('#lens').hidden = true; }
   if (name !== 'labo' && window.stopLabo) window.stopLabo();
   window.scrollTo(0, 0);
 }
@@ -486,6 +486,8 @@ const rec = {
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
   phrase: store.get('phrase', false),      // écoute par phrase (au lieu de continue)
+  lensZoom: Number(store.get('lensZoom', 1.6)), // loupe sur la ligne en cours (0 = désactivée)
+  lensTarget: null,     // mot attendu dans le livre (suivi par la loupe)
   showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
   lastResultAt: 0,      // heure de la dernière réponse du micro
   noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
@@ -566,13 +568,13 @@ async function applyReciteView(startPage) {
   $('#recite-book').hidden = !paged;
   rec.book = false;
   rec.spans = rec.textSpans;
-  if (!paged) { closeMushaf(); render(); return; } // le cadre suit le mot attendu (render)
+  if (!paged) { closeMushaf(); $('#lens').hidden = true; render(); return; } // le cadre suit le mot attendu (render)
   const keys = new Set(current.ayahs.map(ayahKey));
   const [first, last] = await selectionPages();
   await document.fonts.ready;
   await nextFrame();
   const w0 = rec.words[Math.min(rec.shown.pos, rec.words.length - 1)];
-  mushaf.onFlip = (n) => updateFrame('recite', n);
+  mushaf.onFlip = (n) => { updateFrame('recite', n); setTimeout(() => updateLens(rec.lensTarget), 60); };
   await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1]);
   rec.glyph = rec.words.map((w) => {
     const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
@@ -604,10 +606,56 @@ function renderBook(st) {
     } else cls += ' hidden';
     g.className = cls;
   });
+  rec.lensTarget = st.pos < rec.words.length ? target : null;
   if (!target && st.pos >= rec.words.length) target = rec.glyph[rec.words.length - 1];
   const p = target ? Number(target.closest('.mpage').dataset.page) : 0;
-  if (p && p !== mushafCurrentPage()) mushafGoto(p);
+  if (p && p !== mushafCurrentPage()) { mushafGoto(p); $('#lens').hidden = true; } // la loupe revient une fois la page tournée
+  else updateLens(rec.lensTarget);
 }
+
+// ---------- Loupe ----------
+// Bandeau agrandi posé sur la ligne en cours : la ligne précédente, la ligne en cours et la
+// suivante (2 lignes seulement en haut et en bas de page). Agrandie, une ligne ne tient plus
+// dans la largeur de l'écran : le bandeau glisse le long de la ligne pour garder le mot attendu
+// au centre.
+function updateLens(target) {
+  const lens = $('#lens');
+  const z = rec.lensZoom;
+  if (!rec.book || !z || !target || views.recite.hidden || !$('#summary').hidden) { lens.hidden = true; return; }
+  const line = target.closest('.mline');
+  const lr = line.getBoundingClientRect();
+  if (!lr.height) { lens.hidden = true; return; } // page en train de tourner
+  const body = line.parentElement;
+  const rows = [line.previousElementSibling, line, line.nextElementSibling].filter(Boolean);
+  const cs = getComputedStyle(body);
+  const contentW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const f = parseFloat(body.style.fontSize) || 20;
+  const inner = lens.firstElementChild;
+  inner.innerHTML = '';
+  inner.style.fontSize = f + 'px';
+  inner.style.width = contentW + 'px';
+  for (const r of rows) { const c = r.cloneNode(true); c.style.width = contentW + 'px'; inner.appendChild(c); }
+  lens.hidden = false;
+  const lensH = rows.length * f * 1.6 * z + 8;
+  lens.style.height = lensH + 'px';
+  // horizontal : le mot attendu au centre, sans dépasser les bouts de la ligne
+  const lensW = lens.clientWidth, W = contentW * z;
+  const cur = inner.children[rows.indexOf(line)].querySelector('.current');
+  const cx = cur ? cur.offsetLeft + cur.offsetWidth / 2 : contentW / 2;
+  const tx = W <= lensW ? (lensW - W) / 2 : Math.min(0, Math.max(lensW - W, lensW / 2 - cx * z));
+  inner.style.transform = `translateX(${tx}px) scale(${z})`;
+  // vertical : centré sur la ligne en cours, dans les limites du cadre
+  const vr = views.recite.getBoundingClientRect();
+  const top = Math.max(vr.top + 46, Math.min(lr.top + lr.height / 2 - lensH / 2, vr.bottom - 42 - lensH));
+  lens.style.top = top + 'px';
+}
+
+$('#lens-zoom').value = String(rec.lensZoom);
+$('#lens-zoom').addEventListener('change', () => {
+  rec.lensZoom = Number($('#lens-zoom').value);
+  store.set('lensZoom', rec.lensZoom);
+  updateLens(rec.lensTarget);
+});
 
 $('#btn-recite-view').addEventListener('click', () => {
   learnView = learnView === 'page' ? 'text' : 'page';
@@ -1242,6 +1290,7 @@ function replayAt(i) {
 const markOf = (st, i) => (rec.forcedBad.has(i) ? 'bad' : rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
 
 function finish() {
+  $('#lens').hidden = true;
   stopListening();
   const marks = rec.words.map((_, i) => markOf(rec.shown, i));
   const ok = marks.filter((m) => m === 'ok').length;

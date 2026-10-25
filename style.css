@@ -283,6 +283,17 @@ body {
 .framed > .mushaf { overflow-y: auto; color: var(--page-ink); }
 .book-host { overflow: hidden; }
 .mbook { margin: 0 auto; }
+/* loupe : bandeau agrandi sur la ligne en cours, qui peut déborder du cadre */
+.lens {
+  position: fixed; left: 0; right: 0; z-index: 5; overflow: hidden;
+  background: var(--page); color: var(--page-ink);
+  border-top: 2px solid var(--gold); border-bottom: 2px solid var(--gold);
+  box-shadow: 0 6px 18px rgb(0 0 0 / .35), 0 -2px 10px rgb(0 0 0 / .15);
+  pointer-events: none; transition: top .25s ease;
+}
+.lens-in { position: absolute; top: 4px; left: 0; transform-origin: 0 0; transition: transform .25s ease; }
+.lens-in .mline { line-height: 1.6; }
+.lens-in .hmark { display: none; }
 /* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */
 .mbook, #recite-text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
