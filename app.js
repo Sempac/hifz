@@ -480,6 +480,7 @@ const rec = {
   spans: [],
   level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
   overrides: new Set(), // mots marqués justes à la main par l'utilisateur
+  forcedBad: new Set(), // mots marqués faux à la main (appui long)
   counted: new Set(),   // mots déjà pris en compte par l'apprentissage automatique
   flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
@@ -532,7 +533,7 @@ function openRecite() {
       span.className = 'w';
       span.textContent = t;
       const idx = rec.words.length;
-      span.addEventListener('click', () => acceptWord(idx));
+      span.dataset.i = idx;
       box.appendChild(span);
       box.appendChild(document.createTextNode(' '));
       rec.words.push({ text: t, norm: nw, s: x.s, ayah: n, k: k++ });
@@ -679,13 +680,72 @@ function renderFavs() {
   }
 }
 
-// Toucher un mot faux ou gris du livre : il est accepté (comme le bouton ✓)
-$('#recite-book').addEventListener('click', (e) => {
-  const g = e.target.closest('.mw');
-  const idxs = g && rec.glyphWords?.get(g);
-  if (!idxs) return;
-  const i = idxs.find((j) => ['bad', 'unsure'].includes(markOf(rec.shown, j)));
-  if (i !== undefined) acceptWord(i);
+// ---------- Appui long sur un mot déjà récité : vert ↔ rouge ----------
+// Le micro ne détecte pas tout (voyelle fausse, mot proche…) : l'utilisateur corrige lui-même.
+// Appui long (et non simple toucher) pour éviter les erreurs de manipulation en tournant les pages.
+const LONG_PRESS_MS = 500;
+
+// Indices des mots du texte sous le doigt (un mot du livre peut en regrouper deux)
+function wordsAt(target) {
+  const g = target.closest('.mw');
+  if (g) return rec.glyphWords?.get(g) || [];
+  const w = target.closest('#recite-text .w');
+  return w ? [Number(w.dataset.i)] : [];
+}
+
+function toggleWords(idxs) {
+  idxs = idxs.filter((i) => i < rec.shown.pos); // seulement les mots déjà récités
+  if (!idxs.length) return;
+  const isBad = (i) => ['bad', 'unsure'].includes(markOf(rec.shown, i));
+  if (idxs.some(isBad)) idxs.forEach(markRight); else idxs.forEach(markWrong);
+  render();
+  if (!$('#summary').hidden) finish(); // met à jour le bilan
+}
+
+// « C'était une faute » : rouge, dans « À revoir », et l'application oublie ce qu'elle avait
+// appris pour ce mot (elle l'avait peut-être accepté à cause de cet apprentissage)
+function markWrong(i) {
+  const w = rec.words[i];
+  rec.overrides.delete(i);
+  rec.forcedBad.add(i);
+  if (learned[w.norm]) { delete learned[w.norm]; store.set('learned', learned); }
+  if (learnCounts[w.norm]) { delete learnCounts[w.norm]; store.set('learnCounts', learnCounts); }
+  rec.flagged.add(i);
+  review[wordKey(w)] = { s: w.s, a: w.ayah, k: w.k, text: w.text, ok: 0 };
+  saveReview();
+  $('#heard').textContent = `🔴 « ${w.text} » marqué faux, ajouté à « À revoir ».`;
+}
+
+// « Je l'avais bien dit » : vert (comme ✓) ; retiré d'« À revoir » s'il y a été mis pendant cette récitation
+function markRight(i) {
+  const w = rec.words[i];
+  if (rec.flagged.has(i)) { rec.flagged.delete(i); delete review[wordKey(w)]; saveReview(); }
+  // marqué faux à la main puis remis : il retrouve sa couleur ; s'il était faux pour le micro, on le valide
+  const wasForced = rec.forcedBad.delete(i);
+  if (!wasForced || ['bad', 'unsure'].includes(markOf(rec.shown, i))) acceptWord(i);
+  $('#heard').textContent = `🟢 « ${w.text} » validé.`;
+}
+
+['#recite-book', '#recite-text'].forEach((id) => {
+  const host = $(id);
+  let timer = null, start = null;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  host.addEventListener('pointerdown', (e) => {
+    const idxs = wordsAt(e.target);
+    if (!idxs.length) return;
+    start = { x: e.clientX, y: e.clientY };
+    cancel();
+    timer = setTimeout(() => {
+      timer = null;
+      if (navigator.vibrate) navigator.vibrate(30);
+      toggleWords(idxs);
+    }, LONG_PRESS_MS);
+  });
+  host.addEventListener('pointermove', (e) => {
+    if (timer && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) cancel(); // c'est un glissement (page)
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => host.addEventListener(t, cancel));
+  host.addEventListener('contextmenu', (e) => e.preventDefault()); // pas de menu du navigateur à l'appui long
 });
 
 function resetRecite() {
@@ -695,6 +755,7 @@ function resetRecite() {
   newSession();
   rec.peeked.clear();
   rec.overrides.clear();
+  rec.forcedBad.clear();
   rec.counted.clear();
   rec.flagged.clear();
   rec.reviewOut = null;
@@ -829,6 +890,7 @@ function align(st, heard) {
 // L'utilisateur touche un mot marqué faux à tort : il devient juste, et ce que
 // la reconnaissance avait entendu à sa place sera accepté la prochaine fois.
 function acceptWord(i) {
+  if (rec.forcedBad.delete(i)) { render(); return; } // il avait été marqué faux à la main
   const m = rec.shown.marks[i];
   if (i >= rec.shown.pos || rec.overrides.has(i) || (m !== 'bad' && m !== 'unsure')) return;
   rec.overrides.add(i);
@@ -1177,7 +1239,7 @@ function replayAt(i) {
   }
 }
 
-const markOf = (st, i) => (rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
+const markOf = (st, i) => (rec.forcedBad.has(i) ? 'bad' : rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
 
 function finish() {
   stopListening();

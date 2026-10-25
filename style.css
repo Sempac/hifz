@@ -283,6 +283,8 @@ body {
 .framed > .mushaf { overflow-y: auto; color: var(--page-ink); }
 .book-host { overflow: hidden; }
 .mbook { margin: 0 auto; }
+/* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */
+.mbook, #recite-text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
 
 /* boutons ronds dans les coins, posés sur le cadre */
