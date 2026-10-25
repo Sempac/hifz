@@ -35,6 +35,7 @@
       <button class="tab" data-tab="page">Pages</button>
       <button class="tab" data-tab="hizb">Hizb</button>
       <button class="tab" data-tab="review">À revoir <span id="review-count"></span></button>
+      <button class="tab" data-tab="fav" aria-label="Favoris">★</button>
     </nav>
     <div id="panel-surah" class="tab-panel">
       <div class="search">
@@ -82,6 +83,10 @@
       </div>
       <ul id="review-list" class="review-list"></ul>
     </div>
+    <div id="panel-fav" class="tab-panel sel-panel" hidden>
+      <p class="sel-help">Vos pages favorites (★ en bas à droite de la page pour en ajouter ou en retirer).</p>
+      <ul id="fav-list" class="review-list"></ul>
+    </div>
   </section>
 
   <!-- Panneau : choix des versets -->
@@ -101,44 +106,55 @@
   </div>
 
   <!-- Écran 2 : apprendre (lire + écouter) -->
-  <section id="view-learn" class="view" hidden>
-    <header class="bar">
-      <button class="back" aria-label="Retour">←</button>
-      <h1 id="learn-title"></h1>
-    </header>
-    <div class="toolbar">
-      <select id="reciter" aria-label="Récitateur">
-        <option value="Husary_Muallim_128kbps">Al-Husary (enseignement)</option>
-        <option value="Husary_128kbps">Al-Husary</option>
-        <option value="Minshawy_Murattal_128kbps">Al-Minshawi</option>
-        <option value="Alafasy_128kbps">Al-Afasy</option>
-        <option value="me">🎙 Ma récitation</option>
-      </select>
-      <select id="repeat" aria-label="Répétitions par verset">
-        <option value="1">×1</option>
-        <option value="3">×3</option>
-        <option value="5">×5</option>
-        <option value="10">×10</option>
-      </select>
-      <button id="btn-play" class="btn primary">▶ Écouter</button>
-      <button id="btn-record" class="btn" aria-label="Enregistrer ma récitation">⏺ Ma voix</button>
-      <button id="btn-view" class="btn" aria-label="Affichage">≡ Texte</button>
-    </div>
-    <p id="learn-msg" class="notice" hidden></p>
+  <section id="view-learn" class="view framed" hidden>
+    <!-- cadre décoré : sourate et juz en haut, numéro de page en bas, boutons dans les coins -->
+    <div class="fhead"><span class="cart c-surah"></span><span class="cart c-juz"></span></div>
+    <p id="learn-msg" class="notice float-msg" hidden></p>
     <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
     <div id="learn-book" class="book-host" hidden></div>
-    <p class="tip">Touchez un verset pour l'écouter.</p>
+    <div class="ffoot"><span class="cart c-page"></span></div>
+    <button class="back corner tl" aria-label="Retour">←</button>
+    <button id="learn-gear" class="corner tr" aria-label="Réglages">⚙</button>
+    <button id="btn-play" class="corner bl" aria-label="Écouter">▶</button>
+    <button class="corner br fav-btn" aria-label="Favori">☆</button>
     <div id="rec-bar" class="rec-bar" hidden>
       <span id="rec-label"></span>
       <button id="rec-next" class="btn primary">Suivant ▶</button>
       <button id="rec-stop" class="btn ghost">■ Arrêter</button>
     </div>
+    <div id="learn-settings" class="sheet" hidden>
+      <div class="sheet-body">
+        <h2>Écouter et apprendre</h2>
+        <p class="sel-help" id="learn-title"></p>
+        <label class="set-row">Récitateur
+          <select id="reciter" aria-label="Récitateur">
+            <option value="Husary_Muallim_128kbps">Al-Husary (enseignement)</option>
+            <option value="Husary_128kbps">Al-Husary</option>
+            <option value="Minshawy_Murattal_128kbps">Al-Minshawi</option>
+            <option value="Alafasy_128kbps">Al-Afasy</option>
+            <option value="me">🎙 Ma récitation</option>
+          </select>
+        </label>
+        <label class="set-row">Répétitions par verset
+          <select id="repeat" aria-label="Répétitions par verset">
+            <option value="1">×1</option>
+            <option value="3">×3</option>
+            <option value="5">×5</option>
+            <option value="10">×10</option>
+          </select>
+        </label>
+        <p class="sel-help">Touchez un verset dans la page pour l'écouter ; ▶ en bas à gauche écoute tout.</p>
+        <button id="btn-record" class="btn">⏺ Enregistrer ma récitation</button>
+        <button id="btn-view" class="btn">≡ Affichage texte</button>
+        <button class="btn primary sheet-close">Fermer</button>
+      </div>
+    </div>
   </section>
 
   <!-- Écran 3 : réciter -->
-  <section id="view-recite" class="view" hidden>
-    <!-- pas de bandeau : toute la place pour la page ; une petite flèche de retour -->
-    <button class="back float-back" aria-label="Retour">←</button>
+  <section id="view-recite" class="view framed" hidden>
+    <!-- cadre décoré : sourate et juz en haut, numéro de page en bas, boutons dans les coins -->
+    <div class="fhead"><span class="cart c-surah"></span><span class="cart c-juz"></span></div>
     <div id="recite-text" class="mushaf" dir="rtl" lang="ar"></div>
     <div id="recite-book" class="book-host" hidden></div>
     <div id="no-speech" class="notice" hidden>
@@ -158,24 +174,21 @@
       <span class="unsure">non entendu</span>
       <span class="hint">avec indice / reprise</span>
     </div>
-    <p class="tip recite-tip">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : c'est une vraie faute, le mot va dans « À revoir ». Les deux boutons se déplacent au doigt.</p>
-
-    <!-- bas de l'écran : bande transparente ; un toucher fait apparaître la rangée de boutons -->
-    <div id="tray-strip" class="tray-strip" aria-label="Afficher les boutons">
-      <span class="live-dot" aria-hidden="true"></span>
-      <button id="btn-tray" class="tray-gear" aria-label="Boutons">⚙</button>
-    </div>
-    <footer id="tray" class="tray">
-      <button id="btn-settings" class="tray-btn" aria-label="Réglages">⚙</button>
-      <button id="btn-restart" class="tray-btn" aria-label="Recommencer">↺</button>
-      <button id="btn-mic" class="mic" aria-label="Micro">🎤</button>
-      <button id="btn-hint" class="tray-btn" aria-label="Indice">💡</button>
-    </footer>
+    <div class="ffoot"><span class="cart c-page"></span></div>
+    <button class="back corner tl" aria-label="Retour">←</button>
+    <button id="btn-settings" class="corner tr" aria-label="Réglages">⚙</button>
+    <button id="btn-mic" class="corner bl mic" aria-label="Micro">🎤</button>
+    <button class="corner br fav-btn" aria-label="Favori">☆</button>
 
     <!-- réglages de la récitation -->
     <div id="settings" class="sheet" hidden>
       <div class="sheet-body">
         <h2>Réglages</h2>
+        <div class="actions">
+          <button id="btn-restart" class="btn">↺ Recommencer</button>
+          <button id="btn-hint" class="btn">💡 Indice (mot suivant)</button>
+        </div>
+        <p class="sel-help">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : vraie faute, le mot va dans « À revoir ». Ces deux boutons se déplacent au doigt.</p>
         <label class="set-row">Niveau de correction
           <select id="severity" aria-label="Niveau de correction">
             <option value="1">Très stricte</option>
@@ -190,7 +203,7 @@
         <label class="opt"><input type="checkbox" id="opt-delay"> ⏱ Afficher l'attente entre deux réponses du micro</label>
         <button id="btn-recite-view" class="btn">≡ Affichage texte</button>
         <p class="sel-help" id="recite-title"></p>
-        <button id="settings-close" class="btn primary">Fermer</button>
+        <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>
   </section>

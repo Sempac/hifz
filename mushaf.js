@@ -29,13 +29,15 @@ const mushafFont = (n) => {
   return mushaf.fonts.get(n);
 };
 
-// Marque de hizb au début d'un verset : début de hizb, ¼, ½ ou ¾ (null sinon)
+// Cartouche de marge au début d'un verset : début de hizb (avec le juz quand il commence),
+// ¼, ½ ou ¾ de hizb ; null sinon. Renvoie les lignes du cartouche.
 function hizbMark(s, a) {
   const q = QURAN[s - 1].q[a - 1];
   const prev = a > 1 ? QURAN[s - 1].q[a - 2] : s > 1 ? QURAN[s - 2].q.at(-1) : 0;
   if (q === prev) return null;
   const part = (q - 1) % 4, hizb = Math.ceil(q / 4);
-  return part === 0 ? `حزب ${arNum(hizb)}` : ['', 'ربع', 'نصف', '٣/٤'][part];
+  if (part === 0) return hizb % 2 ? [`الجزء ${arNum((hizb + 1) / 2)}`, `الحزب ${arNum(hizb)}`] : [`الحزب ${arNum(hizb)}`];
+  return [['', 'ربع', 'نصف', '٣/٤'][part], `الحزب ${arNum(hizb)}`];
 }
 
 // Construit l'élément d'une page. inSel(s, a) : le verset fait-il partie de la sélection ?
@@ -76,7 +78,7 @@ function buildMushafPage(n, data, inSel) {
           if (mark) {
             const m = document.createElement('span');
             m.className = 'hmark';
-            m.innerHTML = `۞<small>${mark}</small>`;
+            m.innerHTML = mark.map((t) => `<span>${t}</span>`).join('');
             row.appendChild(m);
           }
         }
@@ -85,11 +87,7 @@ function buildMushafPage(n, data, inSel) {
     }
     body.appendChild(row);
   }
-  inner.appendChild(body);
-  const foot = document.createElement('div');
-  foot.className = 'mfoot';
-  foot.textContent = arNum(n);
-  inner.appendChild(foot);
+  inner.appendChild(body); // le numéro de page est dans le cadre, sous la page
   return page;
 }
 

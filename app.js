@@ -82,6 +82,7 @@ async function loadData() {
   refreshPageInfo();
   refreshHizbInfo();
   renderReview();
+  renderFavs();
   WBW = await fetch('data/wbw.json').then((r) => r.json()).catch(() => ({}));
 }
 
@@ -281,17 +282,19 @@ const nextFrame = () => new Promise((r) => setTimeout(r, 30));
 
 async function applyLearnView(startPage) {
   const paged = learnView === 'page';
-  $('#btn-view').textContent = paged ? '≡ Texte' : '📖 Pages';
+  $('#btn-view').textContent = paged ? '≡ Affichage texte' : '📖 Affichage livre';
   $('#learn-text').hidden = paged;
   $('#learn-book').hidden = !paged;
-  if (!paged) { closeMushaf(); return; }
+  const f = current.ayahs[0];
+  if (!paged) { closeMushaf(); updateFrame('learn', QURAN[f.s - 1].p[f.a - 1]); return; }
   const host = $('#learn-book');
   const keys = new Set(current.ayahs.map(ayahKey));
   const [first, last] = await selectionPages();
-  await document.fonts.ready; // la barre d'outils a sa taille définitive
+  await document.fonts.ready; // le cadre a sa taille définitive
   await nextFrame();
-  mushaf.onFlip = null;
+  mushaf.onFlip = (n) => updateFrame('learn', n);
   await openMushaf(host, first, last, (s, a) => keys.has(`${s}:${a}`), startPage || first);
+  updateFrame('learn', mushafCurrentPage());
 }
 
 // Téléphone tourné (portrait ↔ paysage) : le livre est reconstruit à la nouvelle taille, sur la même page
@@ -317,6 +320,7 @@ $('#btn-view').addEventListener('click', () => {
   learnView = learnView === 'page' ? 'text' : 'page';
   store.set('learnView', learnView);
   stopAudio();
+  $('#learn-settings').hidden = true;
   applyLearnView();
 });
 
@@ -358,14 +362,14 @@ async function playNext() {
   const el = document.querySelector(`.ayah[data-k="${ayahKey(x)}"]`);
   if (el && learnView === 'text') { el.classList.add('playing'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   markBookAyah(ayahKey(x), 'playing');
-  $('#btn-play').textContent = '⏸ Pause';
+  $('#btn-play').textContent = '⏸';
 }
 
 function stopAudio() {
   audio.pause();
   playlist = [];
   document.querySelectorAll('.ayah.playing, .mw.playing').forEach((el) => el.classList.remove('playing'));
-  $('#btn-play').textContent = '▶ Écouter';
+  $('#btn-play').textContent = '▶';
 }
 
 audio.addEventListener('ended', () => { playIdx++; playNext(); });
@@ -561,13 +565,13 @@ async function applyReciteView(startPage) {
   $('#recite-book').hidden = !paged;
   rec.book = false;
   rec.spans = rec.textSpans;
-  if (!paged) { closeMushaf(); render(); return; }
+  if (!paged) { closeMushaf(); render(); return; } // le cadre suit le mot attendu (render)
   const keys = new Set(current.ayahs.map(ayahKey));
   const [first, last] = await selectionPages();
   await document.fonts.ready;
   await nextFrame();
   const w0 = rec.words[Math.min(rec.shown.pos, rec.words.length - 1)];
-  mushaf.onFlip = null;
+  mushaf.onFlip = (n) => updateFrame('recite', n);
   await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1]);
   rec.glyph = rec.words.map((w) => {
     const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
@@ -578,6 +582,7 @@ async function applyReciteView(startPage) {
   rec.spans = rec.glyph; // le rappel surligne les mots récités dans le livre
   rec.book = true;
   render();
+  updateFrame('recite', mushafCurrentPage());
 }
 
 const MARK_RANK = { ok: 1, hint: 2, fixed: 3, unsure: 4, bad: 5 };
@@ -610,23 +615,69 @@ $('#btn-recite-view').addEventListener('click', () => {
   applyReciteView();
 });
 
-// ---------- Rangée de boutons cachée et réglages ----------
-// La rangée (réglages, recommencer, micro, indice) est cachée pour laisser la place à la page :
-// un toucher sur la bande du bas (ou le petit ⚙) la fait apparaître ; elle se cache seule après
-// quelques secondes sans y toucher.
-const TRAY_HIDE_MS = 5000;
-let trayTimer = null;
-function showTray() {
-  $('#tray').classList.add('open');
-  clearTimeout(trayTimer);
-  trayTimer = setTimeout(hideTray, TRAY_HIDE_MS);
+// ---------- Panneaux de réglages (⚙ en haut à droite du cadre) ----------
+$('#btn-settings').addEventListener('click', () => { $('#settings').hidden = false; });
+$('#learn-gear').addEventListener('click', () => { $('#learn-settings').hidden = false; });
+document.querySelectorAll('.sheet').forEach((sh) => {
+  sh.addEventListener('click', (e) => { if (e.target === sh || e.target.closest('.sheet-close')) sh.hidden = true; });
+});
+// Recommencer et Indice sont dans les réglages : le panneau se ferme pour voir la page
+['#btn-restart', '#btn-hint'].forEach((id) => $(id).addEventListener('click', () => { $('#settings').hidden = true; }));
+$('#btn-record').addEventListener('click', () => { $('#learn-settings').hidden = true; });
+
+// ---------- Cadre : sourate, juz et numéro de la page affichée ----------
+const JUZ = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر',
+  'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر', 'الثامن عشر',
+  'التاسع عشر', 'العشرون', 'الحادي والعشرون', 'الثاني والعشرون', 'الثالث والعشرون', 'الرابع والعشرون',
+  'الخامس والعشرون', 'السادس والعشرون', 'السابع والعشرون', 'الثامن والعشرون', 'التاسع والعشرون', 'الثلاثون'];
+const framePage = { learn: 0, recite: 0 };
+
+async function updateFrame(name, page) {
+  if (!page) return;
+  framePage[name] = page;
+  const view = views[name];
+  const d = await mushafPageData(page);
+  const w = d.w.find((x) => x[4] > 0) || d.w[0]; // premier mot de la page
+  const s = w[2], a = w[3];
+  view.querySelector('.c-surah').textContent = `سورة ${QURAN[s - 1].name}`;
+  view.querySelector('.c-juz').textContent = `الجزء ${JUZ[Math.ceil(QURAN[s - 1].q[a - 1] / 8) - 1]}`;
+  view.querySelector('.c-page').textContent = arNum(page);
+  const fav = view.querySelector('.fav-btn');
+  fav.textContent = favs[page] ? '★' : '☆';
+  fav.classList.toggle('on', !!favs[page]);
 }
-function hideTray() { clearTimeout(trayTimer); $('#tray').classList.remove('open'); }
-$('#tray-strip').addEventListener('click', showTray);
-$('#tray').addEventListener('click', () => { if ($('#tray').classList.contains('open')) showTray(); }); // garde ouverte tant qu'on s'en sert
-$('#btn-settings').addEventListener('click', () => { hideTray(); $('#settings').hidden = false; });
-$('#settings-close').addEventListener('click', () => { $('#settings').hidden = true; });
-$('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') $('#settings').hidden = true; });
+
+// ---------- Favoris : pages marquées d'une étoile ----------
+const favs = store.get('favs', {}); // { page: date d'ajout }
+document.querySelectorAll('.fav-btn').forEach((b) => b.addEventListener('click', () => {
+  const name = b.closest('#view-learn') ? 'learn' : 'recite';
+  const p = framePage[name];
+  if (!p) return;
+  if (favs[p]) delete favs[p]; else favs[p] = Date.now();
+  store.set('favs', favs);
+  updateFrame(name, p);
+  renderFavs();
+}));
+
+const pageSelection = (p) => ({ title: `Page ${p}`, ayahs: allAyahs().filter((x) => x.p === p) });
+
+function renderFavs() {
+  const ul = $('#fav-list');
+  ul.innerHTML = '';
+  const pages = Object.keys(favs).map(Number).sort((x, y) => x - y);
+  if (!pages.length) { ul.innerHTML = '<li><span class="rinfo">Aucune page favorite.</span></li>'; return; }
+  for (const p of pages) {
+    const first = allAyahs().find((x) => x.p === p);
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="rw">★</span><span class="rinfo">Page ${p}${first ? ` · ${QURAN[first.s - 1].en} ${first.a}` : ''}</span>`
+      + '<button aria-label="Apprendre">📖</button><button aria-label="Réciter">🎤</button><button aria-label="Retirer">✕</button>';
+    const [bl, br, bx] = li.querySelectorAll('button');
+    bl.addEventListener('click', () => { current = pageSelection(p); openLearn(); });
+    br.addEventListener('click', () => { current = pageSelection(p); openRecite(); });
+    bx.addEventListener('click', () => { delete favs[p]; store.set('favs', favs); renderFavs(); });
+    ul.appendChild(li);
+  }
+}
 
 // Toucher un mot faux ou gris du livre : il est accepté (comme le bouton ✓)
 $('#recite-book').addEventListener('click', (e) => {
@@ -812,6 +863,10 @@ function render() {
     const cur = rec.spans[st.pos];
     if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
     rec.flagged.forEach((i) => rec.spans[i]?.classList.add('flag'));
+    // le cadre indique la page (sourate, juz) du mot attendu
+    const w = rec.words[Math.min(st.pos, rec.words.length - 1)];
+    const p = w && QURAN[w.s - 1].p[w.ayah - 1];
+    if (p && p !== framePage.recite) updateFrame('recite', p);
   }
   const t = validateTarget();
   // « off » plutôt que disabled : un bouton désactivé ne reçoit plus le doigt pour être déplacé
@@ -1204,8 +1259,6 @@ function startListening() {
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
-  $('#tray-strip').classList.add('live');
-  hideTray(); // la page reprend toute la place pendant la récitation
   startRecognizer();
   // après 5 s sans progression, le mot attendu apparaît en gris
   rec.timer = setInterval(() => {
@@ -1255,7 +1308,6 @@ function stopListening() {
   if (rec.shown) rec.committed = rec.shown;
   if (rec.recognition) { try { rec.recognition.abort(); } catch { /* déjà arrêté */ } rec.recognition = null; }
   $('#btn-mic').classList.remove('on');
-  $('#tray-strip').classList.remove('live');
 }
 
 $('#btn-mic').addEventListener('click', () => {

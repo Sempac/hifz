@@ -78,7 +78,7 @@ body {
 .notice.install .btn { margin-top: 8px; width: 100%; }
 .tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
 .tab {
-  flex: 1; padding: 10px; font-size: .95rem; cursor: pointer;
+  flex: 1; padding: 10px 4px; font-size: .9rem; cursor: pointer; white-space: nowrap;
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); color: var(--text);
 }
@@ -238,27 +238,74 @@ body {
   background: transparent; color: inherit; padding: 6px 10px; font-size: .9rem; cursor: pointer;
 }
 
-/* Mushaf paginé */
-:root { --page: #fdfaf0; --page-line: #d8cfb3; --page-ink: #1d1d1b; }
+/* ---------- Mushaf : page beige, cadre vert à motifs dorés ---------- */
+:root {
+  --page: #f7efdc; --page-ink: #1d1d1b;
+  --frame: #1f4d3a; --gold: #c49a45; --cart-ink: #1f4d3a;
+  --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%231f4d3a'/%3E%3Cg fill='none' stroke='%23c49a45' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23c49a45'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
+}
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --page: #1f211d; --page-line: #3d4036; --page-ink: #ecebe6; }
+  :root:not([data-theme="light"]) {
+    --page: #24211a; --page-ink: #ece4d0; --frame: #13261d; --gold: #a8853f; --cart-ink: #e2c98f;
+    --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%2313261d'/%3E%3Cg fill='none' stroke='%23a8853f' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23a8853f'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
+  }
 }
-:root[data-theme="dark"] { --page: #1f211d; --page-line: #3d4036; --page-ink: #ecebe6; }
-/* Apprendre : l'écran fait exactement la hauteur de l'écran du téléphone ; le livre prend
-   tout l'espace restant, le texte continu défile à l'intérieur */
-#view-learn { height: 100dvh; min-height: 0; }
-#view-learn #learn-text { overflow-y: auto; min-height: 0; }
-.book-host { flex: 1; min-height: 0; margin: 4px 8px 0; overflow: hidden; }
+:root[data-theme="dark"] {
+  --page: #24211a; --page-ink: #ece4d0; --frame: #13261d; --gold: #a8853f; --cart-ink: #e2c98f;
+  --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%2313261d'/%3E%3Cg fill='none' stroke='%23a8853f' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23a8853f'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* écran encadré (Apprendre, Réciter) : toute la hauteur du téléphone */
+.view.framed {
+  height: 100dvh; min-height: 0;
+  background: var(--frame) var(--frame-pattern);
+  padding: env(safe-area-inset-top) 6px env(safe-area-inset-bottom);
+}
+.fhead, .ffoot { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.fhead { height: 46px; padding: 0 48px; }
+.ffoot { height: 42px; }
+.cart {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 70px; max-width: 46%; height: 28px; padding: 0 16px; overflow: hidden; white-space: nowrap;
+  background: var(--page); color: var(--cart-ink);
+  border: 2px solid var(--gold); border-radius: 14px;
+  box-shadow: inset 0 0 0 2px var(--page), inset 0 0 0 3px var(--gold), 0 1px 4px rgb(0 0 0 / .35);
+  font-family: "Amiri Quran", serif; font-size: 1rem; line-height: 1;
+}
+.cart:empty { visibility: hidden; }
+.c-page { min-width: 54px; }
+/* zone de la page (livre ou texte) : bordure dorée comme un mushaf imprimé */
+.framed .book-host, .framed > .mushaf {
+  flex: 1; min-height: 0; margin: 0;
+  border: 3px double var(--gold); border-radius: 4px; background: var(--page);
+  box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--gold);
+}
+.framed > .mushaf { overflow-y: auto; color: var(--page-ink); }
+.book-host { overflow: hidden; }
 .mbook { margin: 0 auto; }
-.mpage {
-  overflow: hidden;
-  background: var(--page); color: var(--page-ink);
-  border: 1px solid var(--page-line); border-radius: 6px;
+.mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
+
+/* boutons ronds dans les coins, posés sur le cadre */
+.corner {
+  position: absolute; z-index: 6; width: 40px; height: 40px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; font-size: 1.15rem; line-height: 1; cursor: pointer;
+  background: var(--frame); color: #fff; border: 2px solid var(--gold);
+  box-shadow: 0 2px 6px rgb(0 0 0 / .35);
 }
+.corner.tl { top: calc(env(safe-area-inset-top) + 3px); left: 6px; }
+.corner.tr { top: calc(env(safe-area-inset-top) + 3px); right: 6px; }
+.corner.bl { bottom: calc(env(safe-area-inset-bottom) + 1px); left: 6px; }
+.corner.br { bottom: calc(env(safe-area-inset-bottom) + 1px); right: 6px; }
+.view.framed { position: relative; }
+.corner.fav-btn.on { color: #f4c542; }
+.corner.mic { width: 40px; height: 40px; font-size: 1.1rem; background: var(--frame); border: 2px solid var(--gold); }
+.corner.mic.on { background: var(--bad); animation: pulse 1.4s infinite; }
+.framed .rec-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; }
+
 .minner { height: 100%; display: flex; flex-direction: column; }
 .mbody {
   flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between;
-  padding: 10px 26px 4px;
+  padding: 10px 22px 8px 34px; /* marge gauche : cartouches de hizb */
 }
 .mbody.first { justify-content: center; gap: .35em; }
 .mline {
@@ -267,68 +314,31 @@ body {
 }
 .mline.short { justify-content: center; gap: .18em; }
 .mbody.measuring .mline.words { width: max-content; justify-content: flex-start; }
-/* Réciter : pas de bandeau ni de boutons fixes, l'écran est pour la page (ou le texte) */
-#view-recite { height: 100dvh; min-height: 0; padding-top: env(safe-area-inset-top); }
-#view-recite #recite-text { overflow-y: auto; min-height: 0; margin-bottom: 34px; }
-#view-recite .book-host { margin: 4px 6px 30px; }
-#view-recite.book .recite-tip, #view-recite.book .legend { display: none; }
+
+/* messages et bilans par-dessus la page */
+.float-msg { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }
 #view-recite .summary {
   position: fixed; left: 12px; right: 12px; bottom: 100px; z-index: 7;
   box-shadow: 0 6px 24px rgb(0 0 0 / .3); max-height: 50vh; overflow-y: auto;
 }
-
-/* petite flèche de retour, semi-transparente */
-.float-back {
-  position: fixed; top: calc(env(safe-area-inset-top) + 6px); left: 6px; z-index: 6;
-  width: 34px; height: 34px; border-radius: 50%; padding: 0;
-  border: 1px solid var(--line); background: var(--surface); color: var(--text);
-  font-size: 1.1rem; opacity: .55; cursor: pointer;
-}
-
-/* ce que le micro entend : petite ligne au-dessus de la bande du bas */
+#view-recite .recite-tip, #view-recite .legend { display: none; }
+/* ce que le micro entend : petite ligne en bas de la page */
 #view-recite .heard {
-  position: fixed; left: 44px; right: 44px; bottom: calc(env(safe-area-inset-bottom) + 30px); z-index: 5;
-  margin: 0; min-height: 0; font-size: .95rem; pointer-events: none;
+  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 44px); z-index: 5;
+  margin: 0; min-height: 0; font-size: .9rem; pointer-events: none; color: var(--page-ink); opacity: .65;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #view-recite .heard:empty { display: none; }
+#view-recite #no-speech { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }
 
-/* bande du bas : un toucher fait apparaître la rangée de boutons */
-.tray-strip {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
-  height: calc(env(safe-area-inset-bottom) + 30px);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 8px env(safe-area-inset-bottom); cursor: pointer;
-}
-.tray-gear {
-  width: 28px; height: 28px; border-radius: 50%; padding: 0; margin-left: auto;
-  border: 1px solid var(--line); background: var(--surface); color: var(--text);
-  font-size: .95rem; opacity: .5; cursor: pointer;
-}
-.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); visibility: hidden; }
-.tray-strip.live .live-dot { visibility: visible; animation: blink 1.2s infinite; }
-@keyframes blink { 50% { opacity: .2; } }
-.tray {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 8;
-  display: flex; align-items: center; justify-content: space-around;
-  padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px);
-  background: var(--bg); border-top: 1px solid var(--line); box-shadow: 0 -4px 14px rgb(0 0 0 / .12);
-  transform: translateY(110%); transition: transform .2s ease;
-}
-.tray.open { transform: none; }
-.tray-btn {
-  width: 48px; height: 48px; border-radius: 50%; padding: 0;
-  border: 1px solid var(--line); background: var(--surface); color: var(--text);
-  font-size: 1.3rem; cursor: pointer;
-}
-.tray .mic { width: 60px; height: 60px; font-size: 1.6rem; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
 .set-row select {
-  padding: 8px; border-radius: 10px; font-size: 1rem;
+  padding: 8px; border-radius: 10px; font-size: 1rem; max-width: 60%;
   border: 1px solid var(--line); background: var(--bg); color: var(--text);
 }
-#settings .opt { margin: 0 0 12px; }
-#settings .btn { width: 100%; margin-top: 6px; }
+.sheet .opt { margin: 0 0 12px; }
+.sheet .sheet-body > .btn { width: 100%; margin-top: 6px; }
+.sheet-body { max-height: 85dvh; overflow-y: auto; }
 
 /* mots du livre pendant la récitation */
 .mw.hidden { color: transparent; background: var(--hidden); }
@@ -347,17 +357,20 @@ body {
 .mw.recording { background: var(--bad-bg); }
 .mline.head { justify-content: center; }
 .mline.head span {
-  font-family: "Amiri Quran", serif; font-size: .62em; line-height: 1.5; color: var(--accent);
-  border: 3px double var(--accent); border-radius: 8px; padding: 0 1.4em;
+  font-family: "Amiri Quran", serif; font-size: .62em; line-height: 1.5; color: var(--cart-ink);
+  border: 2px solid var(--gold); border-radius: 1em; padding: 0 1.6em; background: var(--page);
+  box-shadow: inset 0 0 0 2px var(--page), inset 0 0 0 3px var(--gold);
 }
 .mline.basm { justify-content: center; font-family: "Amiri Quran", serif; font-size: .72em; }
+/* cartouche de hizb dans la marge */
 .hmark {
-  position: absolute; left: -1.25em; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; align-items: center;
-  font-family: "Amiri Quran", serif; font-size: .5em; line-height: 1; color: var(--accent);
+  position: absolute; left: -31px; top: 50%; transform: translateY(-50%); width: 27px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 3px 0; overflow: hidden;
+  border: 1px solid var(--gold); border-radius: 6px; background: var(--page);
+  font-family: "Amiri Quran", serif; font-size: 7.5px; line-height: 1.15; color: var(--cart-ink);
 }
-.hmark small { font-size: .7em; white-space: nowrap; }
-.mfoot { text-align: center; font-size: .75rem; color: var(--muted); padding: 0 0 4px; }
+.hmark span { white-space: nowrap; }
 
 /* Labo */
 .labo-row { display: flex; gap: 8px; align-items: center; margin: 0 16px 10px; flex-wrap: wrap; }
