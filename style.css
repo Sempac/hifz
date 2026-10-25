@@ -264,6 +264,26 @@ body {
 }
 .mline.short { justify-content: center; gap: .18em; }
 .mbody.measuring .mline.words { width: max-content; justify-content: flex-start; }
+/* Réciter en mode livre : l'écran fait la hauteur du téléphone, le livre prend l'espace restant */
+#view-recite.book { height: 100dvh; min-height: 0; }
+#view-recite.book .recite-tip, #view-recite.book .legend { display: none; }
+#view-recite.book .heard { min-height: 1.3em; font-size: 1rem; margin-top: 4px; }
+#view-recite.book .summary {
+  position: fixed; left: 12px; right: 12px; bottom: 170px; z-index: 7;
+  box-shadow: 0 6px 24px rgb(0 0 0 / .3); max-height: 50vh; overflow-y: auto;
+}
+
+/* mots du livre pendant la récitation */
+.mw.hidden { color: transparent; background: var(--hidden); }
+.mw.current { box-shadow: 0 0 0 2px var(--current); }
+.mw.peek { color: var(--muted); }
+.mw.ok { color: var(--ok); }
+.mw.bad { color: var(--bad); background: var(--bad-bg); }
+.mw.unsure { color: var(--muted); text-decoration: underline dotted; }
+.mw.hint, .mw.fixed { color: var(--hint); background: var(--hint-bg); }
+.mw.flag { box-shadow: inset 0 -3px 0 var(--bad); }
+.mw.say { background: var(--hint-bg); box-shadow: 0 0 0 2px var(--hint); }
+
 .mw { border-radius: 4px; cursor: pointer; }
 .mw.out { opacity: .3; cursor: default; }
 .mw.playing { background: var(--hint-bg); }

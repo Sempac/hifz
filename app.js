@@ -300,6 +300,7 @@ addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     if (!views.learn.hidden && learnView === 'page' && mushaf.flip) applyLearnView(mushafCurrentPage());
+    if (!views.recite.hidden && rec.book) applyReciteView(mushafCurrentPage());
   }, 300);
 });
 
@@ -537,10 +538,81 @@ function openRecite() {
   }
   $('#no-speech').hidden = !!SR;
   $('#btn-mic').disabled = !SR;
+  rec.textSpans = rec.spans;
+  rec.book = false;
   resetRecite();
   go('recite');
   rec.placeFab();
+  applyReciteView();
 }
+
+// ---------- Réciter sur les pages du mushaf ----------
+// Chaque mot attendu est relié au mot dessiné dans le livre (un mot du livre peut regrouper
+// deux mots du texte, ex. « يَٰٓأَيُّهَا »). Les mots restent cachés à leur place sur la page.
+async function applyReciteView(startPage) {
+  const paged = learnView === 'page';
+  views.recite.classList.toggle('book', paged);
+  $('#btn-recite-view').textContent = paged ? '≡' : '📖';
+  $('#recite-text').hidden = paged;
+  $('#recite-book').hidden = !paged;
+  rec.book = false;
+  rec.spans = rec.textSpans;
+  if (!paged) { closeMushaf(); render(); return; }
+  const keys = new Set(current.ayahs.map(ayahKey));
+  const [first, last] = await selectionPages();
+  await document.fonts.ready;
+  await nextFrame();
+  const w0 = rec.words[Math.min(rec.shown.pos, rec.words.length - 1)];
+  mushaf.onFlip = null;
+  await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1]);
+  rec.glyph = rec.words.map((w) => {
+    const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
+    return document.querySelector(`.mbook .mw[data-w="${w.s}:${w.ayah}:${pos}"]`);
+  });
+  rec.glyphWords = new Map();
+  rec.glyph.forEach((g, i) => { if (g) { if (!rec.glyphWords.has(g)) rec.glyphWords.set(g, []); rec.glyphWords.get(g).push(i); } });
+  rec.spans = rec.glyph; // le rappel surligne les mots récités dans le livre
+  rec.book = true;
+  render();
+}
+
+const MARK_RANK = { ok: 1, hint: 2, fixed: 3, unsure: 4, bad: 5 };
+
+// Affichage dans le livre : un mot du livre prend la pire marque de ses mots du texte ;
+// le livre tourne tout seul jusqu'à la page du mot attendu.
+function renderBook(st) {
+  let target = null;
+  rec.glyphWords.forEach((idxs, g) => {
+    let cls = 'mw';
+    if (idxs.every((i) => i < st.pos)) {
+      let worst = 'ok';
+      for (const i of idxs) { const m = markOf(st, i); if (MARK_RANK[m] > MARK_RANK[worst]) worst = m; }
+      cls += ' ' + worst + (idxs.some((i) => rec.flagged.has(i)) ? ' flag' : '');
+    } else if (idxs.includes(st.pos)) {
+      cls += rec.peeked.has(st.pos) ? ' peek current' : ' hidden current';
+      target = g;
+    } else cls += ' hidden';
+    g.className = cls;
+  });
+  if (!target && st.pos >= rec.words.length) target = rec.glyph[rec.words.length - 1];
+  const p = target ? Number(target.closest('.mpage').dataset.page) : 0;
+  if (p && p !== mushafCurrentPage()) mushafGoto(p);
+}
+
+$('#btn-recite-view').addEventListener('click', () => {
+  learnView = learnView === 'page' ? 'text' : 'page';
+  store.set('learnView', learnView);
+  applyReciteView();
+});
+
+// Toucher un mot faux ou gris du livre : il est accepté (comme le bouton ✓)
+$('#recite-book').addEventListener('click', (e) => {
+  const g = e.target.closest('.mw');
+  const idxs = g && rec.glyphWords?.get(g);
+  if (!idxs) return;
+  const i = idxs.find((j) => ['bad', 'unsure'].includes(markOf(rec.shown, j)));
+  if (i !== undefined) acceptWord(i);
+});
 
 function resetRecite() {
   stopListening();
@@ -704,16 +776,19 @@ function score(st) {
 
 function render() {
   const st = rec.shown;
-  rec.spans.forEach((el, i) => {
-    let cls = 'w';
-    if (i < st.pos) cls += ' ' + markOf(st, i);
-    else if (i === st.pos && rec.peeked.has(i)) cls += ' peek current';
-    else cls += ' hidden' + (i === st.pos ? ' current' : '');
-    el.className = cls;
-  });
-  const cur = rec.spans[st.pos];
-  if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  rec.flagged.forEach((i) => rec.spans[i]?.classList.add('flag'));
+  if (rec.book) renderBook(st);
+  else {
+    rec.spans.forEach((el, i) => {
+      let cls = 'w';
+      if (i < st.pos) cls += ' ' + markOf(st, i);
+      else if (i === st.pos && rec.peeked.has(i)) cls += ' peek current';
+      else cls += ' hidden' + (i === st.pos ? ' current' : '');
+      el.className = cls;
+    });
+    const cur = rec.spans[st.pos];
+    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    rec.flagged.forEach((i) => rec.spans[i]?.classList.add('flag'));
+  }
   const t = validateTarget();
   // « off » plutôt que disabled : un bouton désactivé ne reçoit plus le doigt pour être déplacé
   $('#fab-word').textContent = t >= 0 ? rec.words[t].text : '';
@@ -959,7 +1034,7 @@ function sayWords(idxs, done) {
   const next = () => {
     document.querySelectorAll('.w.say').forEach((el) => el.classList.remove('say'));
     if (!rec.pausing || n >= urls.length) { sayAudio = null; done(); return; }
-    rec.spans[idxs[n]].classList.add('say');
+    rec.spans[idxs[n]]?.classList.add('say');
     sayAudio = sayEl;
     sayEl.onended = next;
     sayEl.onerror = next;

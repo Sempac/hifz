@@ -140,8 +140,10 @@
         <option value="4">Souple</option>
         <option value="5">Très souple</option>
       </select>
+      <button id="btn-recite-view" class="bar-btn" aria-label="Affichage">≡</button>
     </header>
     <div id="recite-text" class="mushaf" dir="rtl" lang="ar"></div>
+    <div id="recite-book" class="book-host" hidden></div>
     <div id="no-speech" class="notice" hidden>
       La reconnaissance vocale n'est pas disponible dans ce navigateur
       (sur iPhone, utilisez Safari pour cette version).
@@ -159,7 +161,7 @@
       <span class="unsure">non entendu</span>
       <span class="hint">avec indice / reprise</span>
     </div>
-    <p class="tip">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : c'est une vraie faute, le mot va dans « À revoir ». Les deux boutons se déplacent au doigt.</p>
+    <p class="tip recite-tip">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : c'est une vraie faute, le mot va dans « À revoir ». Les deux boutons se déplacent au doigt.</p>
     <footer class="controls">
       <label class="opt">
         <input type="checkbox" id="opt-replay">
