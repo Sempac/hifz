@@ -191,7 +191,7 @@ body {
 
 /* Boutons flottants ✗ / ✓ : déplaçables ensemble au doigt */
 .fab-group {
-  position: fixed; right: 16px; bottom: 190px; z-index: 6;
+  position: fixed; right: 12px; bottom: 80px; z-index: 6;
   display: flex; flex-direction: column; gap: 10px; align-items: stretch;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
@@ -264,14 +264,68 @@ body {
 }
 .mline.short { justify-content: center; gap: .18em; }
 .mbody.measuring .mline.words { width: max-content; justify-content: flex-start; }
-/* Réciter en mode livre : l'écran fait la hauteur du téléphone, le livre prend l'espace restant */
-#view-recite.book { height: 100dvh; min-height: 0; }
+/* Réciter : pas de bandeau ni de boutons fixes, l'écran est pour la page (ou le texte) */
+#view-recite { height: 100dvh; min-height: 0; padding-top: env(safe-area-inset-top); }
+#view-recite #recite-text { overflow-y: auto; min-height: 0; margin-bottom: 34px; }
+#view-recite .book-host { margin: 4px 6px 30px; }
 #view-recite.book .recite-tip, #view-recite.book .legend { display: none; }
-#view-recite.book .heard { min-height: 1.3em; font-size: 1rem; margin-top: 4px; }
-#view-recite.book .summary {
-  position: fixed; left: 12px; right: 12px; bottom: 170px; z-index: 7;
+#view-recite .summary {
+  position: fixed; left: 12px; right: 12px; bottom: 100px; z-index: 7;
   box-shadow: 0 6px 24px rgb(0 0 0 / .3); max-height: 50vh; overflow-y: auto;
 }
+
+/* petite flèche de retour, semi-transparente */
+.float-back {
+  position: fixed; top: calc(env(safe-area-inset-top) + 6px); left: 6px; z-index: 6;
+  width: 34px; height: 34px; border-radius: 50%; padding: 0;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 1.1rem; opacity: .55; cursor: pointer;
+}
+
+/* ce que le micro entend : petite ligne au-dessus de la bande du bas */
+#view-recite .heard {
+  position: fixed; left: 44px; right: 44px; bottom: calc(env(safe-area-inset-bottom) + 30px); z-index: 5;
+  margin: 0; min-height: 0; font-size: .95rem; pointer-events: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#view-recite .heard:empty { display: none; }
+
+/* bande du bas : un toucher fait apparaître la rangée de boutons */
+.tray-strip {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  height: calc(env(safe-area-inset-bottom) + 30px);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px env(safe-area-inset-bottom); cursor: pointer;
+}
+.tray-gear {
+  width: 28px; height: 28px; border-radius: 50%; padding: 0; margin-left: auto;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: .95rem; opacity: .5; cursor: pointer;
+}
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); visibility: hidden; }
+.tray-strip.live .live-dot { visibility: visible; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.tray {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 8;
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px);
+  background: var(--bg); border-top: 1px solid var(--line); box-shadow: 0 -4px 14px rgb(0 0 0 / .12);
+  transform: translateY(110%); transition: transform .2s ease;
+}
+.tray.open { transform: none; }
+.tray-btn {
+  width: 48px; height: 48px; border-radius: 50%; padding: 0;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 1.3rem; cursor: pointer;
+}
+.tray .mic { width: 60px; height: 60px; font-size: 1.6rem; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
+.set-row select {
+  padding: 8px; border-radius: 10px; font-size: 1rem;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+#settings .opt { margin: 0 0 12px; }
+#settings .btn { width: 100%; margin-top: 6px; }
 
 /* mots du livre pendant la récitation */
 .mw.hidden { color: transparent; background: var(--hidden); }
@@ -347,14 +401,6 @@ body {
 }
 .summary b { font-size: 1.3rem; }
 
-.controls {
-  position: sticky; bottom: 0;
-  padding: 10px 16px calc(env(safe-area-inset-bottom) + 12px);
-  background: var(--bg);
-  border-top: 1px solid var(--line);
-}
-.controls .opt { margin: 0 0 10px; }
-.controls .buttons { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mic {
   width: 76px; height: 76px; border-radius: 50%; flex: none;
   border: 0; font-size: 2rem; cursor: pointer;

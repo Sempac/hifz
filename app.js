@@ -480,6 +480,10 @@ const rec = {
   flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
+  phrase: store.get('phrase', false),      // écoute par phrase (au lieu de continue)
+  showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
+  lastResultAt: 0,      // heure de la dernière réponse du micro
+  noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
   retries: {},          // mot → nombre de reprises
   pausing: false,       // micro coupé le temps de faire entendre un mot
   committed: null,  // état validé (résultats finaux)
@@ -552,7 +556,7 @@ function openRecite() {
 async function applyReciteView(startPage) {
   const paged = learnView === 'page';
   views.recite.classList.toggle('book', paged);
-  $('#btn-recite-view').textContent = paged ? '≡' : '📖';
+  $('#btn-recite-view').textContent = paged ? '≡ Affichage texte' : '📖 Affichage livre';
   $('#recite-text').hidden = paged;
   $('#recite-book').hidden = !paged;
   rec.book = false;
@@ -602,8 +606,27 @@ function renderBook(st) {
 $('#btn-recite-view').addEventListener('click', () => {
   learnView = learnView === 'page' ? 'text' : 'page';
   store.set('learnView', learnView);
+  $('#settings').hidden = true;
   applyReciteView();
 });
+
+// ---------- Rangée de boutons cachée et réglages ----------
+// La rangée (réglages, recommencer, micro, indice) est cachée pour laisser la place à la page :
+// un toucher sur la bande du bas (ou le petit ⚙) la fait apparaître ; elle se cache seule après
+// quelques secondes sans y toucher.
+const TRAY_HIDE_MS = 5000;
+let trayTimer = null;
+function showTray() {
+  $('#tray').classList.add('open');
+  clearTimeout(trayTimer);
+  trayTimer = setTimeout(hideTray, TRAY_HIDE_MS);
+}
+function hideTray() { clearTimeout(trayTimer); $('#tray').classList.remove('open'); }
+$('#tray-strip').addEventListener('click', showTray);
+$('#tray').addEventListener('click', () => { if ($('#tray').classList.contains('open')) showTray(); }); // garde ouverte tant qu'on s'en sert
+$('#btn-settings').addEventListener('click', () => { hideTray(); $('#settings').hidden = false; });
+$('#settings-close').addEventListener('click', () => { $('#settings').hidden = true; });
+$('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') $('#settings').hidden = true; });
 
 // Toucher un mot faux ou gris du livre : il est accepté (comme le bouton ✓)
 $('#recite-book').addEventListener('click', (e) => {
@@ -625,6 +648,7 @@ function resetRecite() {
   rec.flagged.clear();
   rec.reviewOut = null;
   rec.retries = {};
+  rec.noReplay.clear();
   $('#summary').hidden = true;
   $('#heard').textContent = '';
   render();
@@ -1055,7 +1079,7 @@ function checkReplay(st, final) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
   for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
-    if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= 2) continue;
+    if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= 2 || rec.noReplay.has(i)) continue;
     if (!final && st.pos - 1 - i < REPLAY_CONFIRM) continue; // provisoire : pas encore assez sûr
     replayAt(i);
     return true;
@@ -1153,10 +1177,26 @@ function onResult(e) {
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
   }
+  // Réponse en retard (iPhone : la reconnaissance d'Apple envoie parfois les mots par paquets,
+  // plusieurs secondes après) : les erreurs qu'elle révèle sont marquées, sans rappel, car
+  // l'utilisateur est déjà plus loin dans sa récitation.
+  const now = Date.now();
+  const gap = now - rec.lastResultAt;
+  const newWords = bestCount - rec.heardCount;
+  if (newWords > 0) rec.lastResultAt = now;
+  if (newWords >= LATE_WORDS || (gap > LATE_MS && newWords >= 3)) {
+    for (let i = rec.shown.pos; i < best.pos; i++) {
+      const m = best.marks[i];
+      if (m === 'bad' || m === 'unsure') rec.noReplay.add(i);
+    }
+  }
   rec.heardCount = bestCount;
-  $('#heard').textContent = bestText.split(/\s+/).slice(-8).join(' ');
+  const tail = bestText.split(/\s+/).slice(-8).join(' ');
+  $('#heard').textContent = rec.showDelay && newWords > 0 ? `⏱ ${(gap / 1000).toFixed(1)} s · ${tail}` : tail;
   setShown(best, isFinal);
 }
+const LATE_WORDS = 5;   // mots arrivés d'un coup
+const LATE_MS = 2500;   // attente depuis la réponse précédente
 
 function startListening() {
   if (!SR || rec.listening) return;
@@ -1164,6 +1204,8 @@ function startListening() {
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
+  $('#tray-strip').classList.add('live');
+  hideTray(); // la page reprend toute la place pendant la récitation
   startRecognizer();
   // après 5 s sans progression, le mot attendu apparaît en gris
   rec.timer = setInterval(() => {
@@ -1180,7 +1222,8 @@ function startRecognizer() {
   r.lang = 'ar-SA';
   // Écoute continue : chaque redémarrage du micro fait un bip sur Android et perd
   // les mots prononcés pendant ce temps. On ne relance que si le navigateur coupe.
-  r.continuous = true;
+  r.continuous = !rec.phrase;
+  rec.lastResultAt = Date.now();
   r.interimResults = true;
   r.maxAlternatives = 3;
   // les événements d'un micro déjà remplacé (après une reprise) sont ignorés
@@ -1212,6 +1255,7 @@ function stopListening() {
   if (rec.shown) rec.committed = rec.shown;
   if (rec.recognition) { try { rec.recognition.abort(); } catch { /* déjà arrêté */ } rec.recognition = null; }
   $('#btn-mic').classList.remove('on');
+  $('#tray-strip').classList.remove('live');
 }
 
 $('#btn-mic').addEventListener('click', () => {
@@ -1242,6 +1286,20 @@ $('#btn-hint').addEventListener('click', () => {
   rec.base = clone(st);
   rec.offset = rec.heardCount;
   setShown(st, true);
+});
+
+// Écoute par phrase : le micro est relancé à chaque pause (au lieu d'écouter en continu).
+// Sur iPhone, la reconnaissance d'Apple suit parfois mieux ainsi.
+$('#opt-phrase').checked = rec.phrase;
+$('#opt-phrase').addEventListener('change', () => {
+  rec.phrase = $('#opt-phrase').checked;
+  store.set('phrase', rec.phrase);
+  if (rec.listening) { stopListening(); startListening(); }
+});
+$('#opt-delay').checked = rec.showDelay;
+$('#opt-delay').addEventListener('change', () => {
+  rec.showDelay = $('#opt-delay').checked;
+  store.set('showDelay', rec.showDelay);
 });
 
 $('#opt-replay').checked = rec.replay;

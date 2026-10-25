@@ -130,18 +130,8 @@
 
   <!-- Écran 3 : réciter -->
   <section id="view-recite" class="view" hidden>
-    <header class="bar">
-      <button class="back" aria-label="Retour">←</button>
-      <h1 id="recite-title"></h1>
-      <select id="severity" class="severity" aria-label="Niveau de correction">
-        <option value="1">Très stricte</option>
-        <option value="2">Stricte</option>
-        <option value="3">Normale</option>
-        <option value="4">Souple</option>
-        <option value="5">Très souple</option>
-      </select>
-      <button id="btn-recite-view" class="bar-btn" aria-label="Affichage">≡</button>
-    </header>
+    <!-- pas de bandeau : toute la place pour la page ; une petite flèche de retour -->
+    <button class="back float-back" aria-label="Retour">←</button>
     <div id="recite-text" class="mushaf" dir="rtl" lang="ar"></div>
     <div id="recite-book" class="book-host" hidden></div>
     <div id="no-speech" class="notice" hidden>
@@ -162,17 +152,40 @@
       <span class="hint">avec indice / reprise</span>
     </div>
     <p class="tip recite-tip">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : c'est une vraie faute, le mot va dans « À revoir ». Les deux boutons se déplacent au doigt.</p>
-    <footer class="controls">
-      <label class="opt">
-        <input type="checkbox" id="opt-replay">
-        🔁 Rappel sur erreur : réciter le passage qui précède, puis reprendre
-      </label>
-      <div class="buttons">
-        <button id="btn-restart" class="btn ghost">↺ Recommencer</button>
-        <button id="btn-mic" class="mic" aria-label="Micro">🎤</button>
-        <button id="btn-hint" class="btn ghost">💡 Indice</button>
-      </div>
+
+    <!-- bas de l'écran : bande transparente ; un toucher fait apparaître la rangée de boutons -->
+    <div id="tray-strip" class="tray-strip" aria-label="Afficher les boutons">
+      <span class="live-dot" aria-hidden="true"></span>
+      <button id="btn-tray" class="tray-gear" aria-label="Boutons">⚙</button>
+    </div>
+    <footer id="tray" class="tray">
+      <button id="btn-settings" class="tray-btn" aria-label="Réglages">⚙</button>
+      <button id="btn-restart" class="tray-btn" aria-label="Recommencer">↺</button>
+      <button id="btn-mic" class="mic" aria-label="Micro">🎤</button>
+      <button id="btn-hint" class="tray-btn" aria-label="Indice">💡</button>
     </footer>
+
+    <!-- réglages de la récitation -->
+    <div id="settings" class="sheet" hidden>
+      <div class="sheet-body">
+        <h2>Réglages</h2>
+        <label class="set-row">Niveau de correction
+          <select id="severity" aria-label="Niveau de correction">
+            <option value="1">Très stricte</option>
+            <option value="2">Stricte</option>
+            <option value="3">Normale</option>
+            <option value="4">Souple</option>
+            <option value="5">Très souple</option>
+          </select>
+        </label>
+        <label class="opt"><input type="checkbox" id="opt-replay"> 🔁 Rappel sur erreur : réciter le passage qui précède, puis reprendre</label>
+        <label class="opt"><input type="checkbox" id="opt-phrase"> 📱 Écoute par phrase (à essayer sur iPhone si l'application tarde à suivre)</label>
+        <label class="opt"><input type="checkbox" id="opt-delay"> ⏱ Afficher l'attente entre deux réponses du micro</label>
+        <button id="btn-recite-view" class="btn">≡ Affichage texte</button>
+        <p class="sel-help" id="recite-title"></p>
+        <button id="settings-close" class="btn primary">Fermer</button>
+      </div>
+    </div>
   </section>
 
   <!-- Écran 4 : Labo (test de la reconnaissance avec voyelles, dans le téléphone) -->
