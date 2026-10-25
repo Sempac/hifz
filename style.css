@@ -50,7 +50,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; overflow-x: hidden; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -148,7 +148,8 @@ body {
 .btn.ghost { background: transparent; }
 #picker-close { width: 100%; }
 
-.toolbar { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+.toolbar { display: flex; gap: 6px; padding: 10px 8px; flex-wrap: wrap; }
+.toolbar .btn { padding: 10px 12px; font-size: .95rem; }
 .toolbar select {
   padding: 10px; border-radius: 10px; font-size: .95rem;
   border: 1px solid var(--line); background: var(--surface); color: var(--text);
@@ -233,6 +234,53 @@ body {
   border: 1px solid rgb(255 255 255 / .4); border-radius: 10px;
   background: transparent; color: inherit; padding: 6px 10px; font-size: .9rem; cursor: pointer;
 }
+
+/* Mushaf paginé */
+:root { --page: #fdfaf0; --page-line: #d8cfb3; --page-ink: #1d1d1b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #1f211d; --page-line: #3d4036; --page-ink: #ecebe6; }
+}
+:root[data-theme="dark"] { --page: #1f211d; --page-line: #3d4036; --page-ink: #ecebe6; }
+/* Apprendre : l'écran fait exactement la hauteur de l'écran du téléphone ; le livre prend
+   tout l'espace restant, le texte continu défile à l'intérieur */
+#view-learn { height: 100dvh; min-height: 0; }
+#view-learn #learn-text { overflow-y: auto; min-height: 0; }
+.book-host { flex: 1; min-height: 0; margin: 4px 8px 0; overflow: hidden; }
+.mbook { margin: 0 auto; }
+.mpage {
+  overflow: hidden;
+  background: var(--page); color: var(--page-ink);
+  border: 1px solid var(--page-line); border-radius: 6px;
+}
+.minner { height: 100%; display: flex; flex-direction: column; }
+.mbody {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 10px 26px 4px;
+}
+.mbody.first { justify-content: center; gap: .35em; }
+.mline {
+  position: relative; display: flex; justify-content: space-between; align-items: center;
+  direction: rtl; white-space: nowrap; line-height: 1.6;
+}
+.mline.short { justify-content: center; gap: .18em; }
+.mbody.measuring .mline.words { width: max-content; justify-content: flex-start; }
+.mw { border-radius: 4px; cursor: pointer; }
+.mw.out { opacity: .3; cursor: default; }
+.mw.playing { background: var(--hint-bg); }
+.mw.recording { background: var(--bad-bg); }
+.mline.head { justify-content: center; }
+.mline.head span {
+  font-family: "Amiri Quran", serif; font-size: .62em; line-height: 1.5; color: var(--accent);
+  border: 3px double var(--accent); border-radius: 8px; padding: 0 1.4em;
+}
+.mline.basm { justify-content: center; font-family: "Amiri Quran", serif; font-size: .72em; }
+.hmark {
+  position: absolute; left: -1.25em; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  font-family: "Amiri Quran", serif; font-size: .5em; line-height: 1; color: var(--accent);
+}
+.hmark small { font-size: .7em; white-space: nowrap; }
+.mfoot { text-align: center; font-size: .75rem; color: var(--muted); padding: 0 0 4px; }
 
 /* Labo */
 .labo-row { display: flex; gap: 8px; align-items: center; margin: 0 16px 10px; flex-wrap: wrap; }

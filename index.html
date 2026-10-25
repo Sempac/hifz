@@ -114,10 +114,12 @@
         <option value="10">×10</option>
       </select>
       <button id="btn-play" class="btn primary">▶ Écouter</button>
-      <button id="btn-record" class="btn">⏺ Enregistrer ma récitation</button>
+      <button id="btn-record" class="btn" aria-label="Enregistrer ma récitation">⏺ Ma voix</button>
+      <button id="btn-view" class="btn" aria-label="Affichage">≡ Texte</button>
     </div>
     <p id="learn-msg" class="notice" hidden></p>
     <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
+    <div id="learn-book" class="book-host" hidden></div>
     <p class="tip">Touchez un verset pour l'écouter.</p>
     <div id="rec-bar" class="rec-bar" hidden>
       <span id="rec-label"></span>
@@ -207,7 +209,9 @@
     </div>
   </section>
 
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
   <script src="app.js"></script>
+  <script src="mushaf.js"></script>
   <script src="labo.js"></script>
 </body>
 </html>

@@ -111,6 +111,7 @@ const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
   if (name !== 'learn') { stopAudio(); stopRecording(); }
+  if (name === 'home' && window.closeMushaf) closeMushaf();
   if (name !== 'recite') stopListening();
   if (name !== 'labo' && window.stopLabo) window.stopLabo();
   window.scrollTo(0, 0);
@@ -260,7 +261,71 @@ function openLearn() {
     box.appendChild(span);
   }
   go('learn');
+  applyLearnView();
 }
+
+// ---------- Affichage en pages du mushaf (Apprendre) ----------
+let learnView = store.get('learnView', 'page'); // 'page' (mushaf) ou 'text' (texte continu)
+
+// Pages couvertes par la sélection (le dernier verset peut se terminer sur la page suivante)
+async function selectionPages() {
+  const f = current.ayahs[0], l = current.ayahs[current.ayahs.length - 1];
+  const first = QURAN[f.s - 1].p[f.a - 1];
+  let last = QURAN[l.s - 1].p[l.a - 1];
+  const d = await mushafPageData(last);
+  if (!d.w.some((w) => w[2] === l.s && w[3] === l.a && w[4] === 0) && last < 604) last++;
+  return [first, last];
+}
+
+const nextFrame = () => new Promise((r) => setTimeout(r, 30));
+
+async function applyLearnView(startPage) {
+  const paged = learnView === 'page';
+  $('#btn-view').textContent = paged ? '≡ Texte' : '📖 Pages';
+  $('#learn-text').hidden = paged;
+  $('#learn-book').hidden = !paged;
+  if (!paged) { closeMushaf(); return; }
+  const host = $('#learn-book');
+  const keys = new Set(current.ayahs.map(ayahKey));
+  const [first, last] = await selectionPages();
+  await document.fonts.ready; // la barre d'outils a sa taille définitive
+  await nextFrame();
+  mushaf.onFlip = null;
+  await openMushaf(host, first, last, (s, a) => keys.has(`${s}:${a}`), startPage || first);
+}
+
+// Téléphone tourné (portrait ↔ paysage) : le livre est reconstruit à la nouvelle taille, sur la même page
+let resizeTimer = null;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!views.learn.hidden && learnView === 'page' && mushaf.flip) applyLearnView(mushafCurrentPage());
+  }, 300);
+});
+
+// Surligne un verset dans le livre (lecture, enregistrement) et tourne jusqu'à sa page
+function markBookAyah(key, cls) {
+  document.querySelectorAll(`.mw.${cls}`).forEach((el) => el.classList.remove(cls));
+  if (!key || learnView !== 'page') return;
+  document.querySelectorAll(`.mbook .mw[data-k="${key}"]`).forEach((el) => el.classList.add(cls));
+  const p = mushafPageOf(`.mw[data-k="${key}"]`);
+  if (p) mushafGoto(p);
+}
+
+$('#btn-view').addEventListener('click', () => {
+  learnView = learnView === 'page' ? 'text' : 'page';
+  store.set('learnView', learnView);
+  stopAudio();
+  applyLearnView();
+});
+
+// Toucher un mot du livre : écouter son verset
+$('#learn-book').addEventListener('click', (e) => {
+  const w = e.target.closest('.mw');
+  if (!w || w.classList.contains('out')) return;
+  const x = current.ayahs.find((y) => ayahKey(y) === w.dataset.k);
+  if (x) play([x]);
+});
 
 function play(ayahs) {
   const rep = parseInt($('#repeat').value, 10);
@@ -290,14 +355,15 @@ async function playNext() {
   }
   audio.play().catch(() => stopAudio());
   const el = document.querySelector(`.ayah[data-k="${ayahKey(x)}"]`);
-  if (el) { el.classList.add('playing'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (el && learnView === 'text') { el.classList.add('playing'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  markBookAyah(ayahKey(x), 'playing');
   $('#btn-play').textContent = '⏸ Pause';
 }
 
 function stopAudio() {
   audio.pause();
   playlist = [];
-  document.querySelectorAll('.ayah.playing').forEach((el) => el.classList.remove('playing'));
+  document.querySelectorAll('.ayah.playing, .mw.playing').forEach((el) => el.classList.remove('playing'));
   $('#btn-play').textContent = '▶ Écouter';
 }
 
@@ -356,7 +422,8 @@ function recordAyah(i) {
   const x = current.ayahs[i];
   const key = ayahKey(x);
   const el = document.querySelector(`.ayah[data-k="${key}"]`);
-  if (el) { el.classList.add('recording'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (el && learnView === 'text') { el.classList.add('recording'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  markBookAyah(key, 'recording');
   $('#rec-label').textContent = `⏺ ${QURAN[x.s - 1].en} ${x.a} : récitez puis touchez Suivant`;
   $('#rec-next').textContent = i >= current.ayahs.length - 1 ? 'Terminer ✔' : 'Suivant ▶';
 
@@ -382,7 +449,7 @@ function stopRecording() {
   recording.recorder = null;
   if (recording.stream) recording.stream.getTracks().forEach((t) => t.stop());
   recording.stream = null;
-  document.querySelectorAll('.ayah.recording').forEach((el) => el.classList.remove('recording'));
+  document.querySelectorAll('.ayah.recording, .mw.recording').forEach((el) => el.classList.remove('recording'));
   $('#rec-bar').hidden = true;
   $('#btn-record').disabled = false;
 }
