@@ -53,6 +53,8 @@ const LEVELS = {
 // (la reconnaissance vocale n'est pas parfaite). Les mots très courts doivent être exacts.
 function same(a, b) {
   if (a === b) return true;
+  // l'article « ال » commun ne doit pas compter dans la ressemblance (الدنيا ≠ الرحيم)
+  if (a.startsWith('ال') && b.startsWith('ال') && a.length > 3 && b.length > 3) { a = a.slice(2); b = b.slice(2); }
   if (Math.min(a.length, b.length) <= 2) return false;
   return lev(a, b) / Math.max(a.length, b.length) <= LEVELS[rec.level].tol;
 }
@@ -405,6 +407,7 @@ const rec = {
   spans: [],
   level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
   overrides: new Set(), // mots marqués justes à la main par l'utilisateur
+  counted: new Set(),   // mots déjà pris en compte par l'apprentissage automatique
   replay: store.get('replay', true), // reprise sur erreur
   retries: {},          // mot → nombre de reprises
   pausing: false,       // micro coupé le temps de faire entendre un mot
@@ -466,6 +469,7 @@ function openRecite() {
   $('#btn-mic').disabled = !SR;
   resetRecite();
   go('recite');
+  rec.placeFab();
 }
 
 function resetRecite() {
@@ -475,6 +479,7 @@ function resetRecite() {
   newSession();
   rec.peeked.clear();
   rec.overrides.clear();
+  rec.counted.clear();
   rec.retries = {};
   $('#summary').hidden = true;
   $('#heard').textContent = '';
@@ -497,7 +502,8 @@ function advanceOk(st, j) {
 // Mots sautés : juste après un bip, 1 ou 2 mots manquants sont des mots coupés
 // par le redémarrage du micro, acceptés sans erreur.
 function skipped(st, p, count) {
-  if (st.grace > 0 && st.graceSkip && count <= GRACE_WORDS) for (let j = p; j < p + count; j++) markOk(st, j);
+  if (st.pending.length) resync(st, p, count); // des mots entendus en attente peuvent être parmi eux
+  else if (st.grace > 0 && st.graceSkip && count <= GRACE_WORDS) for (let j = p; j < p + count; j++) markOk(st, j);
   else markSkipped(st, p, count);
 }
 
@@ -511,6 +517,40 @@ function markSkipped(st, p, count) {
     // avec le rappel, un petit mot oublié doit aussi être repris
     else if (count === 1 && L.shortOk && !rec.replay && rec.words[j].norm.length <= 2) st.marks[j] = 'ok';
     else st.marks[j] = 'unsure';
+  }
+}
+
+// Cherche jusqu'à ANCHOR_MAX mots plus loin deux mots attendus consécutifs qui correspondent
+// aux deux mots entendus w1 w2 (assez longs pour ne pas se tromper d'endroit).
+const ANCHOR_MAX = 10;
+function findAnchor(p, w1, w2) {
+  const E = rec.words;
+  for (let k = 1; k <= ANCHOR_MAX && p + k + 1 < E.length; k++) {
+    const a = E[p + k].norm, b = E[p + k + 1].norm;
+    if (a.length + b.length >= 5 && same(w1, a) && same(w2, b)) return k;
+  }
+  return 0;
+}
+
+// Mots p … p+k-1 rattrapés : chacun est juste s'il fait partie des mots entendus en attente
+// (dans l'ordre), sinon il est marqué oublié. Le mot bloqué garde ce qui a été entendu à sa
+// place, pour l'apprentissage.
+function resync(st, p, k) {
+  const pend = st.pending;
+  let q = 0, firstFound = -1;
+  const missing = [];
+  for (let j = p; j < p + k; j++) {
+    let found = -1;
+    for (let t = q; t < pend.length; t++) if (same(pend[t], rec.words[j].norm)) { found = t; break; }
+    if (found >= 0) { markOk(st, j); q = found + 1; if (firstFound < 0) firstFound = found; }
+    else missing.push(j);
+  }
+  // ce qui a été entendu à la place du mot bloqué : les mots en attente avant le premier mot retrouvé
+  const instead = pend.slice(0, firstFound >= 0 ? firstFound : pend.length).slice(0, 2);
+  const L = LEVELS[rec.level];
+  for (const j of missing) {
+    if (j === p && instead.length) { st.marks[j] = 'bad'; st.heard[j] = instead; }
+    else st.marks[j] = missing.length > L.unsure ? 'bad' : 'unsure';
   }
 }
 
@@ -543,6 +583,10 @@ function align(st, heard) {
     let repeated = false;
     for (let j = Math.max(0, p - 4); j < p; j++) if (same(w, E[j].norm)) { repeated = true; break; }
     if (repeated) continue;
+    // l'utilisateur a avancé alors que l'application attendait encore un mot : on le retrouve
+    // plus loin grâce à 2 mots de suite, puis les mots intermédiaires sont vérifiés un par un
+    const anchor = i + 1 < heard.length ? findAnchor(p, w, heard[i + 1]) : 0;
+    if (anchor) { resync(st, p, anchor); advanceOk(st, p + anchor); advanceOk(st, p + anchor + 1); i++; continue; }
     // juste après un bip, un mot mal compris (coupé) est ignoré
     if (st.grace > 0) { st.grace--; continue; }
     // mot inconnu : au bout de quelques-uns d'affilée, le mot attendu est compté comme erreur
@@ -597,12 +641,122 @@ function render() {
   });
   const cur = rec.spans[st.pos];
   if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const t = validateTarget();
+  $('#fab-word').textContent = t >= 0 ? rec.words[t].text : '';
+  $('#btn-validate').disabled = t < 0;
+}
+
+// ---------- Bouton flottant « Valider » ----------
+// Valide d'un pouce, sans chercher le mot dans la page : le mot attendu si l'application
+// est bloquée dessus, sinon le dernier mot rouge ou gris récent, sinon le mot attendu.
+function validateTarget() {
+  const st = rec.shown;
+  if (!st) return -1;
+  const N = rec.words.length;
+  if (st.pos < N && st.pending.length) return st.pos;
+  for (let i = st.pos - 1; i >= Math.max(0, st.pos - REPLAY_WINDOW); i--) {
+    const m = markOf(st, i);
+    if (m === 'bad' || m === 'unsure') return i;
+  }
+  return st.pos < N ? st.pos : -1;
+}
+
+function validate() {
+  const t = validateTarget();
+  if (t < 0) return;
+  if (t < rec.shown.pos) { acceptWord(t); return; }
+  // mot attendu : il devient juste, ce qui a été entendu à sa place est retenu
+  const st = clone(rec.shown);
+  const exp = rec.words[t].norm;
+  const heard = st.pending.filter((h) => h !== exp).slice(0, 2);
+  if (heard.length) {
+    learned[exp] = [...new Set([...(learned[exp] || []), ...heard])];
+    store.set('learned', learned);
+    $('#heard').textContent = `Retenu : « ${heard.join(' ')} » sera accepté pour « ${rec.words[t].text} ».`;
+  }
+  st.marks[t] = 'ok';
+  st.pos = t + 1;
+  st.extra = 0;
+  st.pending = [];
+  st.grace = 0;
+  // la session continue : les mots déjà entendus sont considérés comme traités
+  rec.base = clone(st);
+  rec.offset = rec.heardCount;
+  setShown(st, true);
+}
+
+// Déplaçable au doigt ; un simple toucher valide. La position est retenue.
+(function setupFab() {
+  const fab = $('#btn-validate');
+  const place = (x, y) => {
+    x = Math.max(4, Math.min(innerWidth - fab.offsetWidth - 4, x));
+    y = Math.max(4, Math.min(innerHeight - fab.offsetHeight - 4, y));
+    Object.assign(fab.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+  };
+  let start = null, moved = false;
+  fab.addEventListener('pointerdown', (e) => {
+    const r = fab.getBoundingClientRect();
+    start = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    moved = false;
+    fab.setPointerCapture(e.pointerId);
+  });
+  fab.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    if (!moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 8) return;
+    moved = true;
+    place(e.clientX - start.dx, e.clientY - start.dy);
+  });
+  fab.addEventListener('pointerup', () => {
+    if (!start) return;
+    start = null;
+    if (moved) {
+      const r = fab.getBoundingClientRect();
+      store.set('fabPos', [r.left / innerWidth, r.top / innerHeight]);
+    } else if (!fab.disabled) validate();
+  });
+  // position retenue (en proportion de l'écran), appliquée quand l'écran Réciter s'affiche
+  rec.placeFab = () => {
+    const p = store.get('fabPos', null);
+    if (p) place(p[0] * innerWidth, p[1] * innerHeight);
+  };
+})();
+
+// ---------- Apprentissage automatique ----------
+// Quand un mot est compté faux alors que les mots juste avant et juste après sont justes,
+// ce que la reconnaissance a écrit à sa place est noté. Si la même chose revient
+// AUTO_LEARN fois pour ce mot (sur plusieurs récitations), elle est acceptée ensuite.
+const AUTO_LEARN = 2;
+const learnCounts = store.get('learnCounts', {}); // { motAttendu: { motEntendu: nombre } }
+
+function autoLearn(st) {
+  const newly = [];
+  for (const k of Object.keys(st.heard)) {
+    const i = Number(k);
+    if (rec.counted.has(i) || i + 1 >= st.pos || markOf(st, i) !== 'bad') continue;
+    if (markOf(st, i + 1) !== 'ok' || (i > 0 && markOf(st, i - 1) !== 'ok')) continue;
+    rec.counted.add(i); // une seule fois par récitation pour ce mot
+    const exp = rec.words[i].norm;
+    for (const h of st.heard[i]) {
+      if (h === exp || isLearned(h, exp)) continue;
+      const c = (learnCounts[exp] ||= {});
+      c[h] = (c[h] || 0) + 1;
+      if (c[h] >= AUTO_LEARN) {
+        learned[exp] = [...(learned[exp] || []), h];
+        newly.push(`« ${h} » pour « ${rec.words[i].text} »`);
+      }
+    }
+  }
+  store.set('learnCounts', learnCounts);
+  if (newly.length) {
+    store.set('learned', learned);
+    $('#heard').textContent = `Appris : ${newly.join(', ')} sera accepté la prochaine fois.`;
+  }
 }
 
 function setShown(st, commit) {
   if (st.pos !== rec.shown.pos) rec.lastProgress = Date.now();
   rec.shown = st;
-  if (commit) rec.committed = st;
+  if (commit) { rec.committed = st; autoLearn(st); }
   // le rappel passe avant la fin : une erreur sur le dernier mot doit aussi être reprise
   if (checkReplay(st, commit)) return;
   render();

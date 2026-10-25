@@ -188,6 +188,18 @@ body {
 .w.unsure { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 6px; }
 .w.bad, .w.unsure { cursor: pointer; }
 
+/* Bouton flottant « Valider » : déplaçable au doigt */
+.fab {
+  position: fixed; right: 16px; bottom: 190px; z-index: 6;
+  display: flex; align-items: center; gap: 6px;
+  max-width: 60vw; padding: 10px 16px; border: 0; border-radius: 28px;
+  background: var(--accent); color: var(--accent-text); opacity: .8;
+  font-size: 1.1rem; box-shadow: 0 4px 14px rgb(0 0 0 / .25);
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+}
+.fab:disabled { opacity: .35; }
+.fab span { font-family: "Amiri Quran", serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .severity {
   border: 1px solid rgb(255 255 255 / .4); border-radius: 8px;
   background: transparent; color: inherit; padding: 4px 6px; font-size: .85rem;
