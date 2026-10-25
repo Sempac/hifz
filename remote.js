@@ -131,18 +131,23 @@ function applyEngineUi() {
   $('#server-row').hidden = rec.engine !== 'server';
 }
 
+// bouton micro et avertissement « reconnaissance non disponible » selon le réglage en cours
+function refreshAvailability() {
+  $('#btn-mic').disabled = !recognitionAvailable();
+  $('#no-speech').hidden = recognitionAvailable();
+}
+
 $('#engine').addEventListener('change', () => {
   rec.engine = $('#engine').value;
   store.set('engine', rec.engine);
   applyEngineUi();
   if (rec.listening) { stopListening(); startListening(); }
-  $('#btn-mic').disabled = !recognitionAvailable();
-  $('#no-speech').hidden = recognitionAvailable();
+  refreshAvailability();
 });
 $('#server-url').addEventListener('input', () => {
   rec.serverUrl = $('#server-url').value.trim();
   store.set('serverUrl', rec.serverUrl);
-  $('#btn-mic').disabled = !recognitionAvailable();
+  refreshAvailability();
 });
 // Test par une connexion WebSocket, comme la récitation (une simple requête web serait bloquée
 // par le navigateur, la page de santé du serveur n'autorisant pas les autres sites)
@@ -150,6 +155,7 @@ $('#server-test').addEventListener('click', () => {
   const out = $('#server-status');
   rec.serverUrl = $('#server-url').value.trim();
   store.set('serverUrl', rec.serverUrl);
+  refreshAvailability();
   if (!/^wss?:\/\//.test(rec.serverUrl)) { out.textContent = '❌ L’adresse doit commencer par wss://'; return; }
   out.textContent = 'Test en cours…';
   let ws, done = false;

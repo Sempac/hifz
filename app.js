@@ -1389,6 +1389,8 @@ function finish() {
 // Texte entendu depuis le début de la session. Sur Android, un segment peut répéter
 // le précédent en le complétant (« قل هو » puis « قل هو الله ») : on garde le plus long.
 function sessionText(results, a) {
+  // serveur Hifz : les morceaux sont toujours distincts, on les met bout à bout
+  if (rec.engine === 'server') return results.map((r) => r[0].transcript.trim()).filter(Boolean).join(' ');
   const segs = [];
   for (const r of results) {
     const t = r[Math.min(a, r.length - 1)].transcript.trim();
