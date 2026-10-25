@@ -27,6 +27,7 @@
       <button class="tab" data-tab="surah">Sourates</button>
       <button class="tab" data-tab="page">Pages</button>
       <button class="tab" data-tab="hizb">Hizb</button>
+      <button class="tab" data-tab="review">À revoir <span id="review-count"></span></button>
     </nav>
     <div id="panel-surah" class="tab-panel">
       <div class="search">
@@ -65,6 +66,14 @@
         <button id="hizb-learn" class="btn">📖 Apprendre</button>
         <button id="hizb-recite" class="btn primary">🎤 Réciter</button>
       </div>
+    </div>
+    <div id="panel-review" class="tab-panel sel-panel" hidden>
+      <p class="sel-help">Les mots que vous avez signalés avec ✗. Un mot sort de la liste après 3 récitations justes de suite, ou avec ✕.</p>
+      <div id="review-actions" class="actions">
+        <button id="review-learn" class="btn">📖 Apprendre</button>
+        <button id="review-recite" class="btn primary">🎤 Réciter ces versets</button>
+      </div>
+      <ul id="review-list" class="review-list"></ul>
     </div>
   </section>
 
@@ -137,7 +146,10 @@
       Vous pouvez quand même réciter et toucher <b>Indice</b> pour vérifier mot par mot.
     </div>
     <div id="heard" class="heard" dir="rtl" lang="ar"></div>
-    <button id="btn-validate" class="fab" aria-label="Valider le mot">✓ <span id="fab-word" dir="rtl" lang="ar"></span></button>
+    <div id="fab-group" class="fab-group">
+      <button id="btn-flag" class="fab red" aria-label="Signaler une faute">✗ <span id="flag-word" dir="rtl" lang="ar"></span></button>
+      <button id="btn-validate" class="fab" aria-label="Valider le mot">✓ <span id="fab-word" dir="rtl" lang="ar"></span></button>
+    </div>
     <div id="summary" class="summary" hidden></div>
     <div class="legend">
       <span class="ok">correct</span>
@@ -145,7 +157,7 @@
       <span class="unsure">non entendu</span>
       <span class="hint">avec indice / reprise</span>
     </div>
-    <p class="tip">Un mot juste marqué faux, ou l'application bloquée sur un mot ? Touchez le bouton ✓ flottant (déplaçable) : le mot est validé et retenu.</p>
+    <p class="tip">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : c'est une vraie faute, le mot va dans « À revoir ». Les deux boutons se déplacent au doigt.</p>
     <footer class="controls">
       <label class="opt">
         <input type="checkbox" id="opt-replay">

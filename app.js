@@ -81,6 +81,7 @@ async function loadData() {
   renderList();
   refreshPageInfo();
   refreshHizbInfo();
+  renderReview();
   WBW = await fetch('data/wbw.json').then((r) => r.json()).catch(() => ({}));
 }
 
@@ -408,6 +409,8 @@ const rec = {
   level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
   overrides: new Set(), // mots marqués justes à la main par l'utilisateur
   counted: new Set(),   // mots déjà pris en compte par l'apprentissage automatique
+  flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
+  reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
   retries: {},          // mot → nombre de reprises
   pausing: false,       // micro coupé le temps de faire entendre un mot
@@ -480,6 +483,8 @@ function resetRecite() {
   rec.peeked.clear();
   rec.overrides.clear();
   rec.counted.clear();
+  rec.flagged.clear();
+  rec.reviewOut = null;
   rec.retries = {};
   $('#summary').hidden = true;
   $('#heard').textContent = '';
@@ -641,10 +646,93 @@ function render() {
   });
   const cur = rec.spans[st.pos];
   if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  rec.flagged.forEach((i) => rec.spans[i]?.classList.add('flag'));
   const t = validateTarget();
+  // « off » plutôt que disabled : un bouton désactivé ne reçoit plus le doigt pour être déplacé
   $('#fab-word').textContent = t >= 0 ? rec.words[t].text : '';
-  $('#btn-validate').disabled = t < 0;
+  $('#btn-validate').classList.toggle('off', t < 0);
+  const f = flagTarget();
+  $('#flag-word').textContent = f >= 0 ? rec.words[f].text : '';
+  $('#btn-flag').classList.toggle('off', f < 0);
 }
+
+// ---------- « À revoir » : les fautes signalées par l'utilisateur ----------
+// Gardées dans le téléphone : { "sourate:verset:mot": { s, a, k, text, ok } }
+// ok = récitations justes de suite depuis le signalement ; à REVIEW_OK, le mot sort de la liste.
+const REVIEW_OK = 3;
+const review = store.get('review', {});
+const wordKey = (w) => `${w.s}:${w.ayah}:${w.k}`;
+const saveReview = () => { store.set('review', review); renderReview(); };
+
+// Mot que ✗ signale : celui du rappel en cours, sinon le dernier mot avec un souci
+// (faux, non entendu, corrigé après rappel, indice), sinon le mot attendu si l'application
+// est bloquée dessus, sinon le dernier mot récité.
+function flagTarget() {
+  const st = rec.shown;
+  if (!st) return -1;
+  const N = rec.words.length;
+  if (rec.pausing && st.pos < N) return st.pos;
+  for (let i = st.pos - 1; i >= Math.max(0, st.pos - REPLAY_WINDOW); i--) {
+    if (markOf(st, i) !== 'ok' && !rec.flagged.has(i)) return i;
+  }
+  if (st.pos < N && st.pending.length) return st.pos;
+  return st.pos > 0 ? st.pos - 1 : -1;
+}
+
+function flagWord() {
+  const i = flagTarget();
+  if (i < 0) return;
+  rec.flagged.add(i);
+  const w = rec.words[i];
+  review[wordKey(w)] = { s: w.s, a: w.ayah, k: w.k, text: w.text, ok: 0 };
+  saveReview();
+  $('#heard').textContent = `🚩 « ${w.text} » ajouté à « À revoir ».`;
+  render();
+}
+
+// En fin de récitation : progrès des mots à revoir qui étaient dans le passage.
+function updateReview() {
+  let out = 0;
+  rec.words.forEach((w, i) => {
+    const r = review[wordKey(w)];
+    if (!r || rec.flagged.has(i)) return;
+    if (markOf(rec.shown, i) === 'ok' && !rec.overrides.has(i)) {
+      r.ok++;
+      if (r.ok >= REVIEW_OK) { delete review[wordKey(w)]; out++; }
+    } else r.ok = 0; // erreur, indice ou rappel : on recommence à compter
+  });
+  saveReview();
+  return out;
+}
+
+// Versets contenant des mots à revoir, dans l'ordre du mushaf
+function reviewAyahs(entries) {
+  const seen = new Set(), ayahs = [];
+  entries.sort((x, y) => x.s - y.s || x.a - y.a || x.k - y.k);
+  for (const r of entries) { const k = `${r.s}:${r.a}`; if (!seen.has(k)) { seen.add(k); ayahs.push({ s: r.s, a: r.a }); } }
+  return ayahs;
+}
+
+function renderReview() {
+  const entries = Object.entries(review).map(([key, r]) => ({ key, ...r }));
+  $('#review-count').textContent = entries.length ? `(${entries.length})` : '';
+  const ul = $('#review-list');
+  ul.innerHTML = '';
+  $('#review-actions').hidden = !entries.length;
+  if (!entries.length) { ul.innerHTML = '<li><span class="rinfo">Aucun mot à revoir.</span></li>'; return; }
+  for (const r of entries.sort((x, y) => x.s - y.s || x.a - y.a || x.k - y.k)) {
+    const li = document.createElement('li');
+    const name = QURAN.length ? QURAN[r.s - 1].en : `Sourate ${r.s}`;
+    li.innerHTML = `<span class="rw" dir="rtl"></span><span class="rinfo">${name} ${r.a} · ${r.ok}/${REVIEW_OK} juste</span><button aria-label="Retirer">✕</button>`;
+    li.querySelector('.rw').textContent = r.text;
+    li.querySelector('button').addEventListener('click', () => { delete review[r.key]; saveReview(); });
+    ul.appendChild(li);
+  }
+}
+
+const reviewSelection = () => ({ title: 'À revoir', ayahs: reviewAyahs(Object.values(review)) });
+$('#review-learn').addEventListener('click', () => { current = reviewSelection(); openLearn(); });
+$('#review-recite').addEventListener('click', () => { current = reviewSelection(); openRecite(); });
 
 // ---------- Bouton flottant « Valider » ----------
 // Valide d'un pouce, sans chercher le mot dans la page : le mot attendu si l'application
@@ -685,9 +773,9 @@ function validate() {
   setShown(st, true);
 }
 
-// Déplaçable au doigt ; un simple toucher valide. La position est retenue.
+// Les deux boutons se déplacent ensemble au doigt ; un simple toucher agit. La position est retenue.
 (function setupFab() {
-  const fab = $('#btn-validate');
+  const fab = $('#fab-group');
   const place = (x, y) => {
     x = Math.max(4, Math.min(innerWidth - fab.offsetWidth - 4, x));
     y = Math.max(4, Math.min(innerHeight - fab.offsetHeight - 4, y));
@@ -696,7 +784,7 @@ function validate() {
   let start = null, moved = false;
   fab.addEventListener('pointerdown', (e) => {
     const r = fab.getBoundingClientRect();
-    start = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    start = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, btn: e.target.closest('button') };
     moved = false;
     fab.setPointerCapture(e.pointerId);
   });
@@ -708,11 +796,14 @@ function validate() {
   });
   fab.addEventListener('pointerup', () => {
     if (!start) return;
+    const btn = start.btn;
     start = null;
     if (moved) {
       const r = fab.getBoundingClientRect();
       store.set('fabPos', [r.left / innerWidth, r.top / innerHeight]);
-    } else if (!fab.disabled) validate();
+    } else if (btn && !btn.classList.contains('off')) {
+      if (btn.id === 'btn-validate') validate(); else flagWord();
+    }
   });
   // position retenue (en proportion de l'écran), appliquée quand l'écran Réciter s'affiche
   rec.placeFab = () => {
@@ -876,10 +967,22 @@ function finish() {
   const unsure = marks.filter((m) => m === 'unsure').length;
   const fixed = marks.filter((m) => m === 'fixed').length;
   const pct = Math.round((ok / Math.max(1, rec.words.length - unsure)) * 100);
+  // progrès des mots « À revoir » : une seule fois par récitation (finish peut être rappelé)
+  if (rec.reviewOut === null) rec.reviewOut = updateReview();
+  const flagged = [...rec.flagged].sort((x, y) => x - y).map((i) => rec.words[i]);
   $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} correct · ❌ ${bad} erreur(s) · 💡 ${hint} indice(s)`
     + (fixed ? ` · 🔁 ${fixed} corrigé(s) après reprise` : '')
-    + (unsure ? ` · ${unsure} non entendu(s)` : '');
+    + (unsure ? ` · ${unsure} non entendu(s)` : '')
+    + (rec.reviewOut ? `<br>🎉 ${rec.reviewOut} mot(s) sorti(s) de « À revoir »` : '')
+    + (flagged.length
+      ? `<div class="rv">🚩 À revoir : ${flagged.length} mot(s)<br>${flagged.map((w) => `<span class="rw" dir="rtl">${w.text}</span> <small>(${QURAN[w.s - 1].en} ${w.ayah})</small>`).join('<br>')}</div>`
+        + '<button id="btn-review-these" class="btn primary">🎤 Réviser ces versets</button>'
+      : '');
   $('#summary').hidden = false;
+  $('#btn-review-these')?.addEventListener('click', () => {
+    current = { title: 'À revoir', ayahs: reviewAyahs(flagged.map((w) => ({ s: w.s, a: w.ayah, k: w.k }))) };
+    openRecite();
+  });
 }
 
 // Texte entendu depuis le début de la session. Sur Android, un segment peut répéter

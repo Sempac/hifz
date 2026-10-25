@@ -188,16 +188,39 @@ body {
 .w.unsure { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 6px; }
 .w.bad, .w.unsure { cursor: pointer; }
 
-/* Bouton flottant « Valider » : déplaçable au doigt */
-.fab {
+/* Boutons flottants ✗ / ✓ : déplaçables ensemble au doigt */
+.fab-group {
   position: fixed; right: 16px; bottom: 190px; z-index: 6;
+  display: flex; flex-direction: column; gap: 10px; align-items: stretch;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.fab {
   display: flex; align-items: center; gap: 6px;
-  max-width: 60vw; padding: 10px 16px; border: 0; border-radius: 28px;
+  max-width: 50vw; padding: 10px 16px; border: 0; border-radius: 28px;
   background: var(--accent); color: var(--accent-text); opacity: .8;
   font-size: 1.1rem; box-shadow: 0 4px 14px rgb(0 0 0 / .25);
-  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+  touch-action: none; cursor: grab;
 }
-.fab:disabled { opacity: .35; }
+.fab.red { background: var(--bad); color: #fff; }
+.fab.off { opacity: .35; }
+
+/* mot signalé comme faute (reste marqué même s'il est ensuite corrigé) */
+.w.flag { box-shadow: inset 0 -3px 0 var(--bad); }
+.w.flag::after { content: "🚩"; font-size: .45em; vertical-align: super; }
+
+/* liste « À revoir » */
+.review-list { list-style: none; margin: 16px 0 0; padding: 0; }
+.review-list li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+}
+.review-list .rw { font-family: "Amiri Quran", serif; font-size: 1.5rem; }
+.review-list .rinfo { flex: 1; color: var(--muted); font-size: .85rem; }
+.review-list button { border: 0; background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; }
+.summary .rv { margin-top: 10px; text-align: right; }
+.summary .rv .rw { font-family: "Amiri Quran", serif; font-size: 1.3rem; color: var(--bad); }
+.summary .btn { margin-top: 10px; }
 .fab span { font-family: "Amiri Quran", serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .severity {
