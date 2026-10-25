@@ -41,12 +41,13 @@ function lev(a, b) {
 //   extra    nombre de mots inconnus d'affilée avant de compter le mot attendu comme erreur
 //   unsure   nombre de mots sautés d'affilée affichés « non entendu » au lieu d'erreur
 //   shortOk  un petit mot (1-2 lettres) sauté seul est accepté
+//   insMin   longueur minimale d'un mot en trop pour le signaler (0 = pas de détection)
 const LEVELS = {
-  1: { tol: 0.25, extra: 2, unsure: 0, shortOk: false },
-  2: { tol: 0.34, extra: 2, unsure: 0, shortOk: false },
-  3: { tol: 0.42, extra: 3, unsure: 1, shortOk: false },
-  4: { tol: 0.5, extra: 3, unsure: 1, shortOk: true },
-  5: { tol: 0.58, extra: 4, unsure: 2, shortOk: true },
+  1: { tol: 0.25, extra: 2, unsure: 0, shortOk: false, insMin: 2 },
+  2: { tol: 0.34, extra: 2, unsure: 0, shortOk: false, insMin: 2 },
+  3: { tol: 0.42, extra: 3, unsure: 1, shortOk: false, insMin: 3 },
+  4: { tol: 0.5, extra: 3, unsure: 1, shortOk: true, insMin: 3 },
+  5: { tol: 0.58, extra: 4, unsure: 2, shortOk: true, insMin: 0 },
 };
 
 // Deux mots sont considérés identiques s'ils diffèrent d'au plus une part des lettres
@@ -511,8 +512,9 @@ const rec = {
 //           le début de la reprise peut être coupé ou mal compris
 // graceSkip : pendant cette tolérance, des mots manquants sont acceptés (pas après un rappel,
 //             où le mot à retrouver doit vraiment être dit)
-const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, grace: 0, graceSkip: true });
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, grace: st.grace, graceSkip: st.graceSkip });
+// ins       : mots en trop, par position du mot attendu devant lequel ils ont été ajoutés
+const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, grace: 0, graceSkip: true });
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, grace: st.grace, graceSkip: st.graceSkip });
 const GRACE_WORDS = 2;
 
 function openRecite() {
@@ -902,17 +904,20 @@ function align(st, heard) {
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
     if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
-    // un mot attendu entendu en deux morceaux
-    if (i + 1 < heard.length && same(w + heard[i + 1], E[p].norm)) { advanceOk(st, p); i++; continue; }
+    // un mot attendu entendu en deux morceaux (pas si le second morceau est à lui seul le mot
+    // attendu : le premier est alors un mot en trop)
+    if (i + 1 < heard.length && !same(heard[i + 1], E[p].norm) && same(w + heard[i + 1], E[p].norm)) {
+      advanceOk(st, p); i++; continue;
+    }
     // mot(s) sauté(s) : le mot entendu correspond à un mot un peu plus loin
     let skip = 0;
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && same(w, E[p + k].norm)) { skip = k; break; }
     }
     if (skip) { skipped(st, p, skip); advanceOk(st, p + skip); continue; }
-    // l'utilisateur répète un mot déjà récité : on l'ignore
+    // l'utilisateur répète des mots déjà récités (par exemple il reprend le verset) : on les ignore
     let repeated = false;
-    for (let j = Math.max(0, p - 4); j < p; j++) if (same(w, E[j].norm)) { repeated = true; break; }
+    for (let j = Math.max(0, p - 12); j < p; j++) if (same(w, E[j].norm)) { repeated = true; break; }
     if (repeated) continue;
     // l'utilisateur a avancé alors que l'application attendait encore un mot : on le retrouve
     // plus loin grâce à 2 mots de suite, puis les mots intermédiaires sont vérifiés un par un
@@ -920,6 +925,22 @@ function align(st, heard) {
     if (anchor) { resync(st, p, anchor); advanceOk(st, p + anchor); advanceOk(st, p + anchor + 1); i++; continue; }
     // juste après un bip, un mot mal compris (coupé) est ignoré
     if (st.grace > 0) { st.grace--; continue; }
+    // mot en trop : un mot hors du texte suivi du bon mot attendu. Traité comme un oubli :
+    // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
+    const insMin = LEVELS[rec.level].insMin;
+    if (insMin && w.length >= insMin && !st.pending.length && i + 1 < heard.length) {
+      const nx = heard[i + 1];
+      if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) {
+        st.marks[p] = 'bad';
+        st.ins[p] = w;
+        st.pos = p + 1;
+        st.extra = 0;
+        st.pending = [];
+        st.grace = 0;
+        i++;
+        continue;
+      }
+    }
     // mot inconnu : au bout de quelques-uns d'affilée, le mot attendu est compté comme erreur
     st.extra++;
     st.pending.push(w);
@@ -1268,6 +1289,8 @@ function replayAt(i) {
   st.extra = 0;
   st.pending = [];
   for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
+  const extraWord = st.ins[i]; // rappel dû à un mot en trop ?
+  for (const k of Object.keys(st.ins)) if (Number(k) >= i) delete st.ins[k];
   rec.shown = rec.committed = st;
   newSession();
   render();
@@ -1282,7 +1305,9 @@ function replayAt(i) {
     }
   };
   if (i > 0) {
-    $('#heard').textContent = 'Écoutez le rappel, puis continuez au mot suivant.';
+    $('#heard').textContent = extraWord
+      ? `➕ Mot en trop : « ${extraWord} ». Écoutez le rappel, puis reprenez.`
+      : 'Écoutez le rappel, puis continuez au mot suivant.';
     sayWords(rappelWords(i), resume);
   } else {
     $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
