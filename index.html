@@ -22,6 +22,7 @@
   <section id="view-home" class="view">
     <header class="bar">
       <h1>Hifz</h1>
+      <button id="btn-train" class="bar-btn">🎙 Entraîner</button>
       <button id="btn-labo" class="bar-btn">🧪 Labo</button>
     </header>
     <!-- affiché seulement quand l'application est ouverte dans le navigateur (pas installée) -->
@@ -269,10 +270,43 @@
     </div>
   </section>
 
+  <!-- Écran 5 : enregistrements pour entraîner le modèle sur sa voix -->
+  <section id="view-train" class="view" hidden>
+    <header class="bar">
+      <button class="back" aria-label="Retour">←</button>
+      <h1>🎙 Entraîner sur ma voix</h1>
+    </header>
+    <p class="notice">
+      Lisez le verset affiché, en entier et sans faute, comme vous récitez d'habitude.
+      Si vous vous trompez, touchez <b>↺ Refaire</b>. Les enregistrements restent dans le téléphone ;
+      <b>Exporter</b> les rassemble dans un fichier à copier sur le PC.
+    </p>
+    <div class="labo-row">
+      <select id="train-surah" aria-label="Sourate"></select>
+      <label>Verset <input id="train-ayah" type="number" min="1" value="1" inputmode="numeric"></label>
+    </div>
+    <div id="train-ref" class="mushaf labo-ref" dir="rtl" lang="ar"></div>
+    <div class="labo-rec">
+      <button id="train-mic" class="mic" aria-label="Enregistrer">🎤</button>
+      <p id="train-status" class="tip">Touchez 🎤 pour commencer.</p>
+    </div>
+    <div class="actions train-actions">
+      <button id="train-redo" class="btn" disabled>↺ Refaire</button>
+      <button id="train-stop" class="btn" disabled>■ Arrêter</button>
+      <button id="train-play" class="btn" disabled>▶ Écouter le dernier</button>
+    </div>
+    <p id="train-stats" class="tip"></p>
+    <div class="actions train-actions">
+      <button id="train-export" class="btn primary">⬇ Exporter</button>
+      <button id="train-clear" class="btn">🗑 Effacer les exportés</button>
+    </div>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
   <script src="app.js"></script>
   <script src="mushaf.js"></script>
   <script src="remote.js"></script>
   <script src="labo.js"></script>
+  <script src="train.js"></script>
 </body>
 </html>

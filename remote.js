@@ -57,13 +57,51 @@ function releaseMic() {
   if (mic.ctx) mic.ctx.close().catch(() => {});
   mic.stream = null;
   mic.ctx = null;
+  closeSocket();
+}
+
+// Une seule connexion au serveur, ouverte toute la récitation : après un rappel, on ne se
+// reconnecte pas (trop lent à travers internet), on demande au serveur de repartir de zéro.
+// Chaque reprise a un numéro de session ; les réponses des sessions précédentes sont ignorées.
+const conn = { ws: null, url: '', opening: null, sid: 0, listener: null };
+
+function getSocket(url) {
+  if (conn.ws && conn.ws.readyState === 1 && conn.url === url) return Promise.resolve(conn.ws);
+  if (conn.opening && conn.url === url) return conn.opening;
+  closeSocket();
+  conn.url = url;
+  conn.opening = new Promise((resolve, reject) => {
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { reject(e); return; }
+    ws.binaryType = 'arraybuffer';
+    const timer = setTimeout(() => { try { ws.close(); } catch { /* fermé */ } reject(new Error('délai')); }, 8000);
+    ws.onopen = () => { clearTimeout(timer); conn.ws = ws; resolve(ws); };
+    ws.onerror = () => { clearTimeout(timer); reject(new Error('réseau')); };
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.sid === conn.sid && conn.listener) conn.listener.deliver(msg);
+    };
+    ws.onclose = () => {
+      if (conn.ws === ws) conn.ws = null;
+      mic.sink = null;
+      if (conn.listener) conn.listener.end(); // l'application relance (et se reconnecte)
+    };
+  }).finally(() => { conn.opening = null; });
+  return conn.opening;
+}
+
+function closeSocket() {
+  const ws = conn.ws;
+  conn.ws = null;
+  conn.listener = null;
+  if (ws) { try { ws.close(); } catch { /* fermé */ } }
 }
 
 class ServerRecognizer {
   constructor(url) {
     this.url = url;
     this.continuous = true;
-    this.ws = null;
     this.ended = false;
   }
 
@@ -78,28 +116,19 @@ class ServerRecognizer {
     }
     if (this.ended) return; // arrêté pendant l'ouverture du micro
     let ws;
-    try { ws = new WebSocket(this.url); } catch { this.fail('network'); return; }
-    this.ws = ws;
-    ws.binaryType = 'arraybuffer';
-    let opened = false;
-    ws.onopen = () => {
-      opened = true;
-      mic.sink = (buf) => { if (ws.readyState === 1) ws.send(buf.buffer); };
-      if (this.onstart) this.onstart();
-      if (this.onaudiostart) this.onaudiostart();
-    };
-    ws.onmessage = (ev) => {
-      let msg;
-      try { msg = JSON.parse(ev.data); } catch { return; }
-      const results = (msg.segments || []).map((s) => Object.assign([{ transcript: s.text, confidence: 1 }], { isFinal: s.final }));
-      if (results.length && this.onresult) this.onresult({ results, resultIndex: 0 });
-    };
-    ws.onerror = () => { if (!opened) this.fail('network'); };
-    ws.onclose = () => {
-      if (mic.sink && this.ws === ws) mic.sink = null;
-      if (!opened) { this.fail('network'); return; }
-      this.end();
-    };
+    try { ws = await getSocket(this.url); } catch { this.fail('network'); return; }
+    if (this.ended) return;
+    this.sid = ++conn.sid;
+    ws.send(JSON.stringify({ type: 'reset', sid: this.sid })); // repartir de zéro
+    conn.listener = this;
+    mic.sink = (buf) => { if (ws.readyState === 1) ws.send(buf.buffer); };
+    if (this.onstart) this.onstart();
+    if (this.onaudiostart) this.onaudiostart();
+  }
+
+  deliver(msg) {
+    const results = (msg.segments || []).map((s) => Object.assign([{ transcript: s.text, confidence: 1 }], { isFinal: s.final }));
+    if (results.length && this.onresult) this.onresult({ results, resultIndex: 0 });
   }
 
   fail(code) {
@@ -114,9 +143,9 @@ class ServerRecognizer {
     if (this.onend) setTimeout(() => this.onend(), 0);
   }
 
+  // pause (rappel, arrêt) : on cesse d'envoyer le son, la connexion reste ouverte
   abort() {
-    mic.sink = null;
-    if (this.ws) { try { this.ws.close(); } catch { /* déjà fermé */ } }
+    if (conn.listener === this) { conn.listener = null; mic.sink = null; }
     this.end();
   }
 

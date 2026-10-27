@@ -108,7 +108,7 @@ function surahHead(s) {
 }
 
 // ---------- Navigation ----------
-const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo') };
+const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo'), train: $('#view-train') };
 
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
@@ -116,6 +116,7 @@ function show(name) {
   if (name === 'home' && window.closeMushaf) closeMushaf();
   if (name !== 'recite') { stopListening(); $('#lens').hidden = true; }
   if (name !== 'labo' && window.stopLabo) window.stopLabo();
+  if (name !== 'train' && window.stopTrain) window.stopTrain();
   window.scrollTo(0, 0);
 }
 
@@ -387,18 +388,24 @@ function showLearnMsg(text) {
 // ---------- Enregistrement de sa propre récitation (stocké dans le téléphone) ----------
 const dbReady = new Promise((resolve, reject) => {
   try {
-    const req = indexedDB.open('hifz', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('rec');
+    // rec : dernière récitation de chaque verset (« Ma récitation ») ;
+    // train : tous les enregistrements pour l'entraînement du modèle (train.js)
+    const req = indexedDB.open('hifz', 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('rec')) db.createObjectStore('rec');
+      if (!db.objectStoreNames.contains('train')) db.createObjectStore('train', { autoIncrement: true });
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   } catch (e) { reject(e); }
 });
 
-async function idb(mode, fn) {
+async function idb(mode, fn, name = 'rec') {
   const db = await dbReady;
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('rec', mode);
-    const req = fn(tx.objectStore('rec'));
+    const tx = db.transaction(name, mode);
+    const req = fn(tx.objectStore(name));
     tx.oncomplete = () => resolve(req.result);
     tx.onerror = () => reject(tx.error);
   });
@@ -824,6 +831,7 @@ function resetRecite() {
   rec.flagged.clear();
   rec.reviewOut = null;
   rec.retries = {};
+  rec.lastReplayAt = -1;
   rec.noReplay.clear();
   $('#summary').hidden = true;
   $('#heard').textContent = '';
@@ -964,7 +972,9 @@ function align(st, heard, raw = []) {
     // mot en trop : un mot hors du texte suivi du bon mot attendu. Traité comme un oubli :
     // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
     const insMin = LEVELS[rec.level].insMin;
-    if (insMin && w.length >= insMin && !st.pending.length && i + 1 < heard.length) {
+    // un bout de mot coupé en deux (fin du mot précédent, ex. « الْآخِي » + « رِينَ ») n'est pas un mot en trop
+    const tail = i > 0 && p > 0 && same(heard[i - 1] + w, E[p - 1].norm);
+    if (insMin && !tail && w.length >= insMin && !st.pending.length && i + 1 < heard.length) {
       const nx = heard[i + 1];
       if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) {
         st.marks[p] = 'bad';
@@ -1300,8 +1310,13 @@ function sayWords(idxs, done) {
 const REPLAY_WINDOW = 6;
 const REPLAY_CONFIRM = 2;
 
+// Après un rappel, pas de nouveau rappel avant REPLAY_SETTLE mots justes : le temps de se remettre
+// dans la récitation (les erreurs restent marquées, sans interrompre).
+const REPLAY_SETTLE = 3;
+
 function checkReplay(st, final) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
+  if (rec.lastReplayAt >= 0 && st.pos < rec.lastReplayAt + REPLAY_SETTLE) return false;
   for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= 2 || rec.noReplay.has(i)) continue;
@@ -1314,6 +1329,7 @@ function checkReplay(st, final) {
 
 function replayAt(i) {
   micLog('rappel au mot ' + (i + 1));
+  rec.lastReplayAt = i;
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
   const r = rec.recognition;
