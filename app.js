@@ -60,6 +60,31 @@ function same(a, b) {
   return lev(a, b) / Math.max(a.length, b.length) <= LEVELS[rec.level].tol;
 }
 
+// Liaison (wasl) : un mot qui commence par l'alif de liaison (اللَّهِ, الْأَرْضِ, اسْتَغْفِرُوا…) perd
+// cet alif quand on ne s'arrête pas avant lui : « مِنَ اللَّهِ » se dit « minallāhi » et la
+// reconnaissance écrit « مِنَلَّهِ » ou « مِنَ لَّهِ ». Devant une lettre solaire, le ل de l'article
+// disparaît aussi (« مِنَ الشُّهَدَاءِ » → « مِنَشُّهَدَاءِ »), et une voyelle longue finale du mot
+// d'avant s'abrège (« فِي الْأَرْضِ » → « فِلْأَرْضِ »).
+const squeeze = (s) => s.replace(/(.)\1+/g, '$1'); // lettre doublée (shadda) : une seule
+const waslForms = (n) => (n.startsWith('ال') ? [n.slice(1), n.slice(2)] : [n.slice(1)]).map(squeeze);
+
+// le mot attendu E[p], entendu sans son alif de liaison
+function waslAlone(w, p) {
+  const e = rec.words[p];
+  if (!e.wasl) return false;
+  // mot court (« لَّهِ ») : identique, au ā long près (« لَّاهُ »)
+  const sw = squeeze(w), noA = (s) => s.replace(/ا/g, '');
+  return waslForms(e.norm).some((f) => (f.length <= 2 ? noA(sw) === noA(f) : same(sw, f)));
+}
+
+// les mots attendus E[p] et E[p + 1] entendus collés par la liaison
+function waslJoined(w, p) {
+  const E = rec.words;
+  if (p + 1 >= E.length || !E[p + 1].wasl) return false;
+  const a = E[p].norm, sw = squeeze(w);
+  return [a, a.replace(/[اوي]$/, '')].some((x) => waslForms(E[p + 1].norm).some((f) => same(sw, squeeze(x + f))));
+}
+
 // Ce que la reconnaissance comprend pour un mot donné chez cet utilisateur,
 // appris quand il touche un mot marqué faux à tort : { motAttendu: [motsEntendus] }
 const learned = store.get('learned', {});
@@ -552,7 +577,8 @@ function openRecite() {
       span.dataset.i = idx;
       box.appendChild(span);
       box.appendChild(document.createTextNode(' '));
-      rec.words.push({ text: t, norm: nw, s: x.s, ayah: n, k: k++ });
+      // wasl : commence par l'alif de liaison (pas أ / إ / آ), sauf le tout premier mot récité
+      rec.words.push({ text: t, norm: nw, s: x.s, ayah: n, k: k++, wasl: idx > 0 && /^[اٱ]/.test(t.normalize('NFC')) });
       rec.spans.push(span);
     }
     const mark = document.createElement('span');
@@ -957,6 +983,11 @@ function align(st, heard, raw = [], stops = new Set()) {
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
     if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
+    // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
+    if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
+    if (waslAlone(w, p)) { advanceOk(st, p); continue; }
+    // voyelle longue abrégée avant la liaison : « وَمَا » entendu « وَمَ » devant « اللَّهُ »
+    if (p + 1 < N && E[p + 1].wasl && E[p].norm.length > 2 && w === E[p].norm.replace(/[اوي]$/, '')) { advanceOk(st, p); continue; }
     // un mot attendu entendu en deux morceaux (pas si le second morceau est à lui seul le mot
     // attendu : le premier est alors un mot en trop)
     if (i + 1 < heard.length && !same(heard[i + 1], E[p].norm) && same(w + heard[i + 1], E[p].norm)) {
