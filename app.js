@@ -77,12 +77,55 @@ function waslAlone(w, p) {
   return waslForms(e.norm).some((f) => (f.length <= 2 ? noA(sw) === noA(f) : same(sw, f)));
 }
 
+// Écritures de E[p] devant un mot à alif de liaison : telle quelle, voyelle longue finale abrégée,
+// ou tanwin dont le ن prend une kasra (التقاء الساكنين : « أَحَدٌ ۝ اللَّهُ » enchaînés se disent
+// « aḥaduni-llāhu », « نُوحٌ ابْنَهُ » → « nūḥuni-bnah »).
+function beforeWasl(p) {
+  const e = rec.words[p], a = e.norm;
+  const forms = [a, a.replace(/[اوي]$/, '')];
+  if (/[ًٌٍ]/.test(e.text)) forms.push(a.replace(/[اي]$/, '') + 'ن');
+  return forms;
+}
+
+// E[p] entendu seul avec le ن du tanwin (« أَحَدُنِ » pour « أَحَدٌ » devant « اللَّهُ »)
+function tanwinNunAlone(w, p) {
+  const E = rec.words;
+  return p + 1 < E.length && E[p + 1].wasl && /[ًٌٍ]/.test(E[p].text) && squeeze(w) === squeeze(beforeWasl(p)[2]);
+}
+
 // les mots attendus E[p] et E[p + 1] entendus collés par la liaison
 function waslJoined(w, p) {
   const E = rec.words;
   if (p + 1 >= E.length || !E[p + 1].wasl) return false;
-  const a = E[p].norm, sw = squeeze(w);
-  return [a, a.replace(/[اوي]$/, '')].some((x) => waslForms(E[p + 1].norm).some((f) => same(sw, squeeze(x + f))));
+  const sw = squeeze(w);
+  return beforeWasl(p).some((x) => waslForms(E[p + 1].norm).some((f) => same(sw, squeeze(x + f))));
+}
+
+// النون الساكنة والتنوين devant le mot suivant : le ن s'assimile à sa première lettre (الإدغام,
+// devant ي ن م و ل ر : « مِنْ رَبِّهِمْ » → « مِرَّبِّهِمْ », « هُدًى لِلْمُتَّقِينَ » → « هُدَلِّلْمُتَّقِينَ »)
+// ou devient م (الإقلاب, devant ب : « مِنْ بَعْدِ » → « مِمْبَعْدِ », « سَمِيعٌ بَصِيرٌ » → « سَمِيعُمْ بَصِيرٌ »).
+// Renvoie les écritures possibles de E[p] ainsi prononcé (vide si la règle ne s'applique pas).
+function nunForms(p) {
+  const E = rec.words, e = E[p], nx = E[p + 1];
+  if (!nx) return []; // (en fin de verset, la règle vaut si l'on enchaîne avec le suivant)
+  const t = e.text.normalize('NFC'), first = nx.norm[0];
+  const nun = /نْ?$/.test(t), tanwin = /[ًٌٍ]/.test(t);
+  if (!(nun || tanwin)) return [];
+  const added = first === 'ب' ? 'م' : 'ينمولر'.includes(first) ? first : null;
+  if (!added) return [];
+  const base = nun ? e.norm.slice(0, -1) : e.norm;
+  // tanwin : l'alif ou le ى qui le porte ne se prononce pas (« هُدًى » → « هُدَ »)
+  const bases = tanwin ? [base, base.replace(/[اي]$/, '')] : [base];
+  return bases.flatMap((b) => [b, b + added]).filter((f) => f.length >= 1 && f !== e.norm);
+}
+
+// E[p] entendu seul, assimilé (« مِ » ou « مِرْ » pour « مِنْ » devant « رَبِّهِمْ »)
+const nunAlone = (w, p) => nunForms(p).includes(squeeze(w));
+
+// E[p] et E[p + 1] entendus collés par l'assimilation (« مِرَّبِّهِمْ »)
+function nunJoined(w, p) {
+  const sw = squeeze(w), b = rec.words[p + 1]?.norm;
+  return nunForms(p).some((x) => same(sw, squeeze(x + b)));
 }
 
 // Ce que la reconnaissance comprend pour un mot donné chez cet utilisateur,
@@ -986,6 +1029,10 @@ function align(st, heard, raw = [], stops = new Set()) {
     // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
     if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (waslAlone(w, p)) { advanceOk(st, p); continue; }
+    if (tanwinNunAlone(w, p)) { advanceOk(st, p); continue; }
+    // إدغام / إقلاب : « مِنْ رَبِّهِمْ » entendu « مِرَّبِّهِمْ », ou « مِنْ » entendu « مِ »
+    if (nunJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
+    if (nunAlone(w, p)) { advanceOk(st, p); continue; }
     // voyelle longue abrégée avant la liaison : « وَمَا » entendu « وَمَ » devant « اللَّهُ »
     if (p + 1 < N && E[p + 1].wasl && E[p].norm.length > 2 && w === E[p].norm.replace(/[اوي]$/, '')) { advanceOk(st, p); continue; }
     // un mot attendu entendu en deux morceaux (pas si le second morceau est à lui seul le mot
