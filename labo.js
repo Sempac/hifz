@@ -26,7 +26,8 @@ function laboSlots(word) {
       if (LMARKS[c]) last.v.push(LMARKS[c]);
     }
   }
-  return out.map((s) => ({ raw: s.raw, v: s.v.filter((x) => x !== '~').sort().join('') }));
+  // signe en double (le modèle écrit parfois « رُُ ») compté une fois
+  return out.map((s) => ({ raw: s.raw, v: [...new Set(s.v)].filter((x) => x !== '~').sort().join('') }));
 }
 
 // Associe les lettres de deux écritures d'un même mot (une lettre peut manquer d'un côté,

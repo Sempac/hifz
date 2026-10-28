@@ -909,34 +909,43 @@ function resync(st, p, k) {
 // Voyelles (serveur Hifz) : un mot reconnu lettre pour lettre mais dont une voyelle diffère
 // est compté faux. La voyelle finale n'est pas exigée quand elle n'est pas prononcée
 // (arrêt, waqf : sukun ou rien), mais une autre voyelle finale (ex. اللَّهِ pour اللَّهُ) est une erreur.
-function vowelError(expected, heardRaw) {
+function vowelError(expected, heardRaw, stop = false) {
   if (!heardRaw || !/[ً-ِ]/.test(heardRaw)) return false; // texte sans voyelles
   const a = laboSlots(expected), b = laboSlots(heardRaw);
   const pair = alignSlots(a, b);
+  // dernière voyelle du mot (dans « تَأْثِيمًا », celle du م : le ا final n'en porte pas)
+  let last = a.length - 1;
+  while (last > 0 && !a[last].v) last--;
   for (let k = 0; k < a.length; k++) {
     if (!a[k].v || pair[k] === undefined) continue;
     const hv = b[pair[k]].v;
-    if (k === a.length - 1) {
-      if (!hv) continue; // arrêt : voyelle finale non prononcée
-      if (hv === a[k].v.replace('n', '')) continue; // tanwin prononcé sans le « n » (arrêt)
+    if (k === last) {
+      // arrêt (fin de verset, ou pause en plein verset) : la voyelle finale n'est pas prononcée
+      // et ce que le modèle écrit à sa place n'a pas de sens (« الْحَكِيمِ » pour « الْحَكِيمُ »)
+      if (!hv || stop) continue;
+      // tanwin présent ou absent : arrêt, ou mot coupé entre deux morceaux (le modèle hésite
+      // alors sur le « n »). Une autre voyelle (ٌ pour ٍ) reste une faute.
+      if (hv.replace('n', '') === a[k].v.replace('n', '')) continue;
     }
     if (hv !== a[k].v) return true;
   }
   return false;
 }
 
-function checkVowels(st, j, heardRaw) {
+function checkVowels(st, j, heardRaw, pause = false) {
   if (!vowelCheck() || st.marks[j] === 'bad') return;
-  if (vowelError(rec.words[j].text, heardRaw)) { st.marks[j] = 'bad'; st.vow[j] = heardRaw; }
+  const E = rec.words, endOfAyah = j + 1 >= E.length || E[j + 1].ayah !== E[j].ayah || E[j + 1].s !== E[j].s;
+  if (vowelError(E[j].text, heardRaw, endOfAyah || pause)) { st.marks[j] = 'bad'; st.vow[j] = heardRaw; }
 }
 
 // Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
-function align(st, heard, raw = []) {
+// stops : indices des mots entendus suivis d'une pause (voyelle finale non exigée).
+function align(st, heard, raw = [], stops = new Set()) {
   const E = rec.words, N = E.length;
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
-    if (w === E[p].norm) { advanceOk(st, p); checkVowels(st, p, raw[i]); continue; }
+    if (w === E[p].norm) { advanceOk(st, p); checkVowels(st, p, raw[i], stops.has(i)); continue; }
     if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
     // (ex. « لم يولد » ne doit pas valider « يلد »)
@@ -944,7 +953,7 @@ function align(st, heard, raw = []) {
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
-    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i]); continue; }
+    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i], stops.has(i)); continue; }
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
     // deux mots attendus entendus collés
     if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
@@ -1406,7 +1415,18 @@ function finish() {
 // le précédent en le complétant (« قل هو » puis « قل هو الله ») : on garde le plus long.
 function sessionText(results, a) {
   // serveur Hifz : les morceaux sont toujours distincts, on les met bout à bout
-  if (rec.engine === 'server') return results.map((r) => r[0].transcript.trim()).filter(Boolean).join(' ');
+  if (rec.engine === 'server') {
+    const texts = results.map((r) => r[0].transcript.trim()).filter(Boolean);
+    // dernier mot de chaque morceau : le serveur coupe aux pauses, donc à un arrêt (rec.segEnds :
+    // indices des mots, la voyelle finale n'y est pas exigée)
+    rec.segEnds = new Set();
+    let n = 0;
+    for (const t of texts) {
+      n += t.split(/\s+/).filter((w) => norm(w)).length;
+      rec.segEnds.add(n - 1);
+    }
+    return texts.join(' ');
+  }
   const segs = [];
   for (const r of results) {
     const t = r[Math.min(a, r.length - 1)].transcript.trim();
@@ -1427,7 +1447,8 @@ function onResult(e) {
     const text = sessionText(results, a);
     const raw = text.split(/\s+/).filter((t) => norm(t)); // mots tels qu'entendus (avec voyelles si serveur)
     const heard = raw.map(norm);
-    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset));
+    const stops = rec.engine === 'server' ? new Set([...rec.segEnds].map((k) => k - rec.offset)) : new Set();
+    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset), stops);
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
   }
