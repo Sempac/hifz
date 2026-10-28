@@ -1013,6 +1013,9 @@ function align(st, heard, raw = [], stops = new Set()) {
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
+    // lettre isolée (bruit, fin du son d'un rappel) : ignorée, sauf si c'est le mot attendu (ق، ص، ن)
+    // (ou « مِنْ » assimilé : « م » devant « رَبِّهِمْ »)
+    if (w.length <= 1 && E[p].norm.length > 1 && !nunAlone(w, p)) continue;
     if (w === E[p].norm) { advanceOk(st, p); checkVowels(st, p, raw[i], stops.has(i)); continue; }
     if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
@@ -1451,7 +1454,9 @@ function replayAt(i) {
       : vowelWord
         ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${rec.words[i].text} ». Écoutez le rappel, puis reprenez.`
         : 'Écoutez le rappel, puis continuez au mot suivant.';
-    sayWords(rappelWords(i), resume);
+    // serveur : micro rouvert un peu après la fin du rappel (sinon il capte la fin du son du
+    // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
+    sayWords(rappelWords(i), () => setTimeout(resume, rec.engine === 'server' ? 400 : 0));
   } else {
     $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
     setTimeout(resume, 500);
