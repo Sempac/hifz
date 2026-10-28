@@ -176,7 +176,7 @@ function surahHead(s) {
 }
 
 // ---------- Navigation ----------
-const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo'), train: $('#view-train') };
+const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo') };
 
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
@@ -184,7 +184,6 @@ function show(name) {
   if (name === 'home' && window.closeMushaf) closeMushaf();
   if (name !== 'recite') { stopListening(); $('#lens').hidden = true; }
   if (name !== 'labo' && window.stopLabo) window.stopLabo();
-  if (name !== 'train' && window.stopTrain) window.stopTrain();
   window.scrollTo(0, 0);
 }
 
@@ -457,7 +456,7 @@ function showLearnMsg(text) {
 const dbReady = new Promise((resolve, reject) => {
   try {
     // rec : dernière récitation de chaque verset (« Ma récitation ») ;
-    // train : tous les enregistrements pour l'entraînement du modèle (train.js)
+    // train : ancien écran « Entraîner sur ma voix » (retiré, magasin gardé pour ne pas changer la version)
     const req = indexedDB.open('hifz', 2);
     req.onupgradeneeded = () => {
       const db = req.result;
