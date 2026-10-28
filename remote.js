@@ -194,4 +194,21 @@ $('#server-test').addEventListener('click', () => {
   ws.onopen = () => { clearTimeout(timer); finish('✅ Serveur joignable'); };
   ws.onerror = () => { clearTimeout(timer); finish('❌ Serveur injoignable (adresse, réseau ou serveur éteint ?)'); };
 });
+
+// Adresse reçue par le lien (ou le QR code) affiché par le notebook Colab : …/hifz/#server=wss://…
+// Elle est enregistrée et le mode serveur activé, sans rien recopier.
+function serverFromLink() {
+  const url = new URLSearchParams(location.hash.slice(1)).get('server');
+  if (!url || !/^wss?:\/\//.test(url)) return;
+  rec.serverUrl = url;
+  rec.engine = 'server';
+  store.set('serverUrl', url);
+  store.set('engine', 'server');
+  history.replaceState(null, '', location.pathname + location.search);
+  applyEngineUi();
+  refreshAvailability();
+  alert('✅ Adresse du serveur Hifz enregistrée.\nReconnaissance : Serveur Hifz.');
+}
+window.addEventListener('hashchange', serverFromLink);
 applyEngineUi();
+serverFromLink();
