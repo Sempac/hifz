@@ -560,6 +560,7 @@ const rec = {
   flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
+  beeps: store.get('beeps', 1),      // bips (on reprend seul) avant le rappel prononcé
   // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
   lastEventAt: 0,       // dernière nouvelle de la reconnaissance (chien de garde iPhone / iPad)
@@ -1345,9 +1346,10 @@ function setShown(st, commit) {
 }
 
 // ---------- Reprise sur erreur ----------
-// Sur une erreur, le micro se coupe, l'application récite le passage qui précède
-// (depuis le début du verset, RAPPEL_MAX mots au plus) jusqu'au dernier mot juste, puis
-// l'utilisateur reprend au mot faux (2 reprises maximum par mot).
+// Sur une erreur, le micro se coupe et l'utilisateur reprend au mot faux. Les rec.beeps premières
+// fois, un simple bip (il cherche seul) ; ensuite l'application récite le passage qui précède
+// (depuis le début du verset, RAPPEL_MAX mots au plus). Après le rappel, le mot reste rouge
+// sans nouvelle interruption (repriseMax).
 const RAPPEL_MAX = 2;
 // Un seul lecteur pour tous les rappels : l'iPhone n'autorise un lecteur à jouer seul
 // (sans toucher l'écran) que s'il a déjà joué une fois suite à un toucher.
@@ -1360,6 +1362,28 @@ function unlockSayAudio() {
   sayEl.onended = sayEl.onerror = null;
   sayEl.src = SILENCE;
   sayEl.play().catch(() => { /* rien à jouer */ });
+}
+
+// Bip court (0,15 s, 880 Hz) fabriqué une fois, joué par le même lecteur que les rappels (iPhone).
+const BEEP = (() => {
+  const rate = 16000, n = rate * 0.15, buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, s) => [...s].forEach((c, k) => buf.setUint8(o + k, c.charCodeAt(0)));
+  str(0, 'RIFF'); buf.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true); buf.setUint16(22, 1, true); buf.setUint32(24, rate, true);
+  buf.setUint32(28, rate * 2, true); buf.setUint16(32, 2, true); buf.setUint16(34, 16, true);
+  str(36, 'data'); buf.setUint32(40, n * 2, true);
+  for (let k = 0; k < n; k++) {
+    const fade = Math.min(1, k / 160, (n - k) / 160); // sans clic au début ni à la fin
+    buf.setInt16(44 + k * 2, Math.sin(2 * Math.PI * 880 * k / rate) * 9000 * fade, true);
+  }
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+})();
+
+function playBeep(done) {
+  sayAudio = sayEl;
+  sayEl.onended = sayEl.onerror = () => { sayAudio = null; done(); };
+  sayEl.src = BEEP;
+  sayEl.play().catch(() => { sayAudio = null; done(); });
 }
 
 // Indices des mots à réciter avant le mot i.
@@ -1403,12 +1427,15 @@ const REPLAY_CONFIRM = 2;
 // dans la récitation (les erreurs restent marquées, sans interrompre).
 const REPLAY_SETTLE = 3;
 
+// interruptions au plus pour un même mot : les bips puis un rappel (2 rappels s'il n'y a pas de bip)
+const repriseMax = () => Math.max(2, rec.beeps + 1);
+
 function checkReplay(st, final) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
   if (rec.lastReplayAt >= 0 && st.pos < rec.lastReplayAt + REPLAY_SETTLE) return false;
   for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
-    if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= 2 || rec.noReplay.has(i)) continue;
+    if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
     if (!final && st.pos - 1 - i < REPLAY_CONFIRM) continue; // provisoire : pas encore assez sûr
     replayAt(i);
     return true;
@@ -1417,7 +1444,6 @@ function checkReplay(st, final) {
 }
 
 function replayAt(i) {
-  micLog('rappel au mot ' + (i + 1));
   rec.lastReplayAt = i;
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
@@ -1448,15 +1474,25 @@ function replayAt(i) {
       rec.base.graceSkip = false;
     }
   };
-  if (i > 0) {
+  // serveur : micro rouvert un peu après la fin du son (sinon il capte la fin du son du
+  // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
+  const after = () => setTimeout(resume, rec.engine === 'server' ? 400 : 0);
+  if (rec.retries[i] <= rec.beeps) {
+    micLog('bip au mot ' + (i + 1));
+    $('#heard').textContent = extraWord
+      ? `🔔 Mot en trop : « ${extraWord} ». Reprenez.`
+      : vowelWord
+        ? `🔔 Voyelle : « ${vowelWord} ». Reprenez ce mot.`
+        : '🔔 Erreur : reprenez à l\'endroit indiqué.';
+    playBeep(after);
+  } else if (i > 0) {
+    micLog('rappel au mot ' + (i + 1));
     $('#heard').textContent = extraWord
       ? `➕ Mot en trop : « ${extraWord} ». Écoutez le rappel, puis reprenez.`
       : vowelWord
         ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${rec.words[i].text} ». Écoutez le rappel, puis reprenez.`
         : 'Écoutez le rappel, puis continuez au mot suivant.';
-    // serveur : micro rouvert un peu après la fin du rappel (sinon il capte la fin du son du
-    // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
-    sayWords(rappelWords(i), () => setTimeout(resume, rec.engine === 'server' ? 400 : 0));
+    sayWords(rappelWords(i), after);
   } else {
     $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
     setTimeout(resume, 500);
@@ -1707,6 +1743,12 @@ $('#opt-delay').checked = rec.showDelay;
 $('#opt-delay').addEventListener('change', () => {
   rec.showDelay = $('#opt-delay').checked;
   store.set('showDelay', rec.showDelay);
+});
+
+$('#beeps').value = String(rec.beeps);
+$('#beeps').addEventListener('change', () => {
+  rec.beeps = Number($('#beeps').value);
+  store.set('beeps', rec.beeps);
 });
 
 $('#opt-replay').checked = rec.replay;
