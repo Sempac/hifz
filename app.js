@@ -20,6 +20,12 @@ function norm(w) {
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .replace(/ء/g, '')
+    // lettres emphatiques et leurs voisines : le modèle les confond selon la voix
+    // (« صِرٌّ » écrit « سِرٌّ », « عَظِيمٌ » écrit « عَطِيمٌ ») ; une erreur de mémoire change le mot, pas
+    // seulement l'emphase, donc on ne les distingue pas
+    .replace(/ص/g, 'س')
+    .replace(/ط/g, 'ت')
+    .replace(/[ضظذ]/g, 'د')
     .replace(/[^ء-ي]/g, '');
 }
 
