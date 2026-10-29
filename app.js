@@ -944,6 +944,7 @@ function resetRecite() {
   rec.noReplay.clear();
   $('#summary').hidden = true;
   $('#heard').textContent = '';
+  $('#fix').hidden = true;
   render();
 }
 
@@ -1019,7 +1020,21 @@ function resync(st, p, k) {
 // est compté faux. La voyelle finale n'est pas exigée quand elle n'est pas prononcée
 // (arrêt, waqf : sukun ou rien), mais une autre voyelle finale (ex. اللَّهِ pour اللَّهُ) est une erreur.
 function vowelError(expected, heardRaw, stop = false) {
-  if (!heardRaw || !/[ً-ِ]/.test(heardRaw)) return false; // texte sans voyelles
+  return !!vowelDiff(expected, heardRaw, stop);
+}
+
+// Première voyelle fausse, pour l'expliquer : { letter, exp, got } (null si tout va bien)
+const VOWEL_NAME = { a: 'فَتْحَة ـَ', u: 'ضَمَّة ـُ', i: 'كَسْرَة ـِ', an: 'تنوين فتح ـً', un: 'تنوين ضم ـٌ', in: 'تنوين كسر ـٍ' };
+// (chaque morceau arabe isolé, U+2068 … U+2069, pour qu'il ne mette pas la phrase française dans le désordre)
+const bidi = (t) => `⁨${t}⁩`;
+const vowelName = (v) => bidi(VOWEL_NAME[v] || v);
+function vowelExplain(expected, heardRaw) {
+  const d = vowelDiff(expected, heardRaw, true) || vowelDiff(expected, heardRaw, false);
+  return d ? `lettre « ${bidi(d.letter)} » : ${vowelName(d.got)} au lieu de ${vowelName(d.exp)}` : '';
+}
+
+function vowelDiff(expected, heardRaw, stop = false) {
+  if (!heardRaw || !/[ً-ِ]/.test(heardRaw)) return null; // texte sans voyelles
   const a = laboSlots(expected), b = laboSlots(heardRaw);
   const pair = alignSlots(a, b);
   // dernière voyelle du mot (dans « تَأْثِيمًا », celle du م : le ا final n'en porte pas)
@@ -1038,9 +1053,9 @@ function vowelError(expected, heardRaw, stop = false) {
       // alors sur le « n »). Une autre voyelle (ٌ pour ٍ) reste une faute.
       if (hv.replace('n', '') === a[k].v.replace('n', '')) continue;
     }
-    if (hv !== a[k].v) return true;
+    if (hv !== a[k].v) return { letter: [...a[k].raw][0], exp: a[k].v, got: hv };
   }
-  return false;
+  return null;
 }
 
 function checkVowels(st, j, heardRaw, pause = false) {
@@ -1556,25 +1571,41 @@ function replayAt(i) {
   // serveur : micro rouvert un peu après la fin du son (sinon il capte la fin du son du
   // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
   const after = () => setTimeout(resume, rec.engine === 'server' ? 400 : 0);
+  const word = rec.words[i].text;
+  // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
+  // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
+  const vowelFix = vowelWord ? [['🔤 Voyelle : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [word, 'ok'], [vowelExplain(word, vowelWord), '', true]] : null;
   if (rec.retries[i] <= rec.beeps) {
     micLog('bip au mot ' + (i + 1));
-    $('#heard').textContent = extraWord
-      ? `🔔 Mot en trop : « ${extraWord} ». Reprenez.`
-      : vowelWord
-        ? `🔔 Voyelle : « ${vowelWord} ». Reprenez ce mot.`
-        : '🔔 Erreur : reprenez à l\'endroit indiqué.';
+    $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Voyelle. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
+    showFix(extraWord ? [['🔔 Mot en trop :'], [extraWord, 'bad'], ['Reprenez sans lui.']] : vowelFix || [['🔔 Erreur : reprenez à l\'endroit indiqué.']]);
     playBeep(after);
   } else {
     micLog('prononciation du mot ' + (i + 1));
-    const word = rec.words[i].text;
-    $('#heard').textContent = extraWord
-      ? `➕ Mot en trop : « ${extraWord} ». Le mot attendu se prononce ainsi : « ${word} ». Reprenez.`
-      : vowelWord
-        ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${word} ». Écoutez, puis reprenez ce mot.`
-        : `🔊 الكلمة تُنطق هكذا : « ${word} ». Écoutez, puis reprenez ce mot.`;
+    $('#heard').textContent = '🔊 الكلمة تُنطق هكذا';
+    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['Le mot attendu :'], [word, 'ok']]
+      : vowelFix || [['🔊 الكلمة تُنطق هكذا :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
     sayPhrase('الكلمة تُنطق هكذا', () => (rec.pausing ? sayWords([i], after) : null));
     micLog(sayPhrase.info);
   }
+}
+
+// Encadré d'explication d'une erreur, en haut de l'écran, en grand : morceaux [texte, mot arabe
+// entendu (bad) ou attendu (ok), ligne à part ?].
+// Il reste affiché pendant la reprise (15 s), et disparaît à l'erreur suivante ou en fin de récitation.
+function showFix(parts) {
+  const box = $('#fix');
+  box.textContent = '';
+  for (const [text, ar, line] of parts) {
+    if (!text) continue;
+    const el = document.createElement(line ? 'div' : 'span');
+    el.textContent = text;
+    if (ar) { el.className = 'ar ' + ar; el.dir = 'rtl'; el.lang = 'ar'; }
+    box.append(el, ' ');
+  }
+  box.hidden = false;
+  clearTimeout(showFix.timer);
+  showFix.timer = setTimeout(() => { box.hidden = true; }, 15000);
 }
 
 const markOf = (st, i) => (rec.forcedBad.has(i) ? 'bad' : rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
@@ -1622,13 +1653,14 @@ function finish() {
     const fixed = m === 'fixed';
     const kind = fixed ? rec.firstErr[i] || 'forgot' : m === 'unsure' ? 'forgot' : errorKind(rec.shown, i);
     const heard = fixed ? '' : rec.shown.ins[i] || rec.shown.vow[i] || (kind !== 'forgot' && (rec.shown.heard[i] || []).join(' ')) || '';
-    (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard });
+    const why = !fixed && rec.shown.vow[i] ? vowelExplain(rec.words[i].text, rec.shown.vow[i]) : '';
+    (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard, why });
   });
-  const line = ({ i, kind, fixed, heard }) => {
+  const line = ({ i, kind, fixed, heard, why }) => {
     const w = rec.words[i];
     return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
       + `<span class="rw" dir="rtl">${w.text}</span> <small>${QURAN[w.s - 1].en} ${w.ayah}`
-      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '')
+      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
       + (fixed ? ' · retrouvé après le bip' : '') + '</small></div>';
   };
   const group = (title, list, help, id) => (list.length
@@ -1646,6 +1678,7 @@ function finish() {
         + '<button id="btn-review-these" class="btn primary">🎤 Réviser ces versets</button>'
       : '');
   $('#summary').hidden = false;
+  $('#fix').hidden = true;
   $('#summary').querySelectorAll('.say-w').forEach((b) => b.addEventListener('click', () => playWord(+b.dataset.i)));
   const redo = (title, list) => {
     current = { title, ayahs: reviewAyahs(list.map(({ i }) => ({ s: rec.words[i].s, a: rec.words[i].ayah, k: rec.words[i].k }))) };
