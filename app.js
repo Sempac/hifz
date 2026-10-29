@@ -1037,9 +1037,11 @@ function align(st, heard, raw = [], stops = new Set()) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
     if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i], stops.has(i)); continue; }
+    // deux mots attendus entendus collés (« أَيْنَمَا » pour « أَيْنَ مَا ») : avant la simple
+    // ressemblance, sinon « أينما » passerait pour « أين » et « ما » pour un oubli
+    const both = p + 1 < N ? E[p].norm + E[p + 1].norm : null;
+    if (both && same(w, both) && lev(w, both) < lev(w, E[p].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
-    // deux mots attendus entendus collés
-    if (p + 1 < N && same(w, E[p].norm + E[p + 1].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
     if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (waslAlone(w, p)) { advanceOk(st, p); continue; }
