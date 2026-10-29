@@ -1,4 +1,4 @@
-﻿// Cache de l'application pour qu'elle s'ouvre sans internet.
+// Cache de l'application pour qu'elle s'ouvre sans internet.
 // Changer VERSION quand la liste SHELL change.
 const VERSION = 'hifz-v11';
 const SHELL = [
@@ -42,13 +42,13 @@ self.addEventListener('fetch', (e) => {
     return res;
   };
   if (url.origin === location.origin) {
-    // Fichiers de l'application : toujours la derniÃ¨re version si le rÃ©seau rÃ©pond,
+    // Fichiers de l'application : toujours la dernière version si le réseau répond,
     // sinon la copie en cache (utilisation hors ligne).
-    // (no-cache : revÃ©rifie auprÃ¨s du serveur au lieu d'utiliser le cache HTTP de 10 min)
+    // (no-cache : revérifie auprès du serveur au lieu d'utiliser le cache HTTP de 10 min)
     e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).then(save).catch(() => caches.match(e.request, { ignoreSearch: true })));
   } else if (url.hostname.endsWith('gstatic.com') || url.hostname === 'fonts.googleapis.com'
     || url.hostname === 'static.qurancdn.com' || url.hostname === 'cdn.jsdelivr.net') {
-    // Polices (Google, mushaf) et bibliothÃ¨ques : mises en cache au premier chargement.
+    // Polices (Google, mushaf) et bibliothèques : mises en cache au premier chargement.
     e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then(save)));
   }
 });
