@@ -1174,6 +1174,16 @@ function align(st, heard, raw = [], stops = new Set()) {
         continue;
       }
     }
+    // serveur : un autre vrai mot du Coran suivi d'une pause (« وَإِيَّايَ فَارْهَبُونِ » en fin de 2:41)
+    // est un mot remplacé : erreur tout de suite, sans attendre d'autres mots inconnus
+    if (server && stops.has(i) && !st.pending.length && w.length >= 3 && isQuranWord(w) && lev(w, E[p].norm) >= 2) {
+      st.marks[p] = 'bad';
+      st.heard[p] = [w];
+      st.pos = p + 1;
+      st.extra = 0;
+      st.grace = 0;
+      continue;
+    }
     // mot inconnu : au bout de quelques-uns d'affilée, le mot attendu est compté comme erreur
     st.extra++;
     st.pending.push(w);
@@ -1638,7 +1648,7 @@ function showFix(parts) {
   }
   box.hidden = false;
   clearTimeout(showFix.timer);
-  showFix.timer = setTimeout(() => { box.hidden = true; }, 15000);
+  showFix.timer = setTimeout(() => { box.hidden = true; rec.lastProgress = Date.now(); }, 15000);
 }
 
 const markOf = (st, i) => (rec.forcedBad.has(i) ? 'bad' : rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
@@ -1656,7 +1666,7 @@ function errorKind(st, i) {
 }
 
 const KIND_LABEL = {
-  forgot: 'oublié', subst: 'autre mot', extra: 'mot en trop avant', hint: 'indice', pron: 'mal prononcé',
+  forgot: 'oublié', subst: 'autre mot', extra: 'mot en trop avant', hint: 'montré après une hésitation', pron: 'mal prononcé',
 };
 
 function playWord(i) {
@@ -1684,17 +1694,19 @@ function finish() {
     if (rec.overrides.has(i)) { misheard.push({ i }); return; }
     if (m === 'ok' || rec.forcedBad.has(i)) return; // marqué faux à la main : dans « À revoir »
     const fixed = m === 'fixed';
-    const kind = fixed ? rec.firstErr[i] || 'forgot' : m === 'unsure' ? 'forgot' : errorKind(rec.shown, i);
+    // mot montré (en gris) après un rappel : on garde la vraie raison de l'erreur (mot en trop, oubli…)
+    const shown = m === 'hint' && rec.firstErr[i];
+    const kind = fixed || shown ? rec.firstErr[i] || 'forgot' : m === 'unsure' ? 'forgot' : errorKind(rec.shown, i);
     const heard = fixed ? '' : rec.shown.ins[i] || rec.shown.vow[i] || (kind !== 'forgot' && (rec.shown.heard[i] || []).join(' ')) || '';
     const why = !fixed && rec.shown.vow[i] ? vowelExplain(rec.words[i].text, rec.shown.vow[i]) : '';
-    (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard, why });
+    (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard, why, shown });
   });
-  const line = ({ i, kind, fixed, heard, why }) => {
+  const line = ({ i, kind, fixed, heard, why, shown }) => {
     const w = rec.words[i];
     return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
       + `<span class="rw" dir="rtl">${w.text}</span> <small>${QURAN[w.s - 1].en} ${w.ayah}`
       + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
-      + (fixed ? ' · retrouvé après le bip' : '') + '</small></div>';
+      + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '') + '</small></div>';
   };
   const group = (title, list, help, id) => (list.length
     ? `<div class="rv"><b>${title} : ${list.length}</b><br><small>${help}</small>${list.map(line).join('')}`
@@ -1801,9 +1813,11 @@ function startListening() {
   micLog('micro lancé');
   startRecognizer();
   rec.timer = setInterval(() => {
-    // après 5 s sans progression, le mot attendu apparaît en gris
+    // après 5 s sans progression (8 s avec le serveur, qui répond avec un peu de retard), le mot
+    // attendu apparaît en gris ; pas pendant la lecture de l'explication d'une erreur (#fix)
     const p = rec.shown.pos;
-    if (!rec.pausing && p < rec.words.length && !rec.peeked.has(p) && Date.now() - rec.lastProgress > 5000) {
+    const wait = rec.engine === 'server' ? 8000 : 5000;
+    if (!rec.pausing && $('#fix').hidden && p < rec.words.length && !rec.peeked.has(p) && Date.now() - rec.lastProgress > wait) {
       rec.peeked.add(p);
       render();
     }
