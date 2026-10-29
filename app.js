@@ -1401,10 +1401,24 @@ function playBeep(done) {
   sayEl.play().catch(() => { sayAudio = null; done(); });
 }
 
-// Phrase dite par la voix de synthèse du téléphone, en arabe : la voix arabe si elle est listée,
+// « الكلمة تُنطق هكذا » : enregistrement phrase.mp3, joué par le même lecteur que les rappels
+// (iPhone). S'il manque, voix de synthèse du téléphone (sayPhraseTts).
+function sayPhrase(text, done) {
+  sayPhrase.info = 'voix : phrase.mp3';
+  sayAudio = sayEl;
+  let over = false;
+  const end = () => { if (!over) { over = true; sayAudio = null; done(); } };
+  const fail = () => { if (!over) { over = true; sayAudio = null; sayPhraseTts(text, done); micLog(sayPhrase.info); } };
+  sayEl.onended = end;
+  sayEl.onerror = fail;
+  sayEl.src = 'phrase.mp3';
+  sayEl.play().catch(fail);
+}
+
+// Voix de synthèse du téléphone, en arabe : la voix arabe si elle est listée,
 // sinon on demande l'arabe au moteur (Android en télécharge une au besoin). S'il ne répond pas,
 // on passe à la suite. sayPhrase.info : ce qui s'est passé (journal du micro).
-function sayPhrase(text, done) {
+function sayPhraseTts(text, done) {
   const tts = window.speechSynthesis;
   if (!tts) { sayPhrase.info = 'voix : synthèse vocale absente'; done(); return; }
   const voice = tts.getVoices().find((v) => v.lang.toLowerCase().startsWith('ar'));
