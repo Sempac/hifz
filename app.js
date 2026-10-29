@@ -1080,11 +1080,15 @@ function align(st, heard, raw = [], stops = new Set()) {
     // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
     const insMin = LEVELS[rec.level].insMin;
     // un bout de mot coupé en deux (fin du mot précédent, ex. « الْآخِي » + « رِينَ ») n'est pas un mot en trop
-    const tail = i > 0 && p > 0 && same(heard[i - 1] + w, E[p - 1].norm);
+    // (mais « إِبْرَاهِيمَ » déjà entier + « مُصَلًّى » ajouté n'en est pas un : le recoller doit rapprocher du mot)
+    const tail = i > 0 && p > 0 && same(heard[i - 1] + w, E[p - 1].norm)
+      && lev(heard[i - 1] + w, E[p - 1].norm) < lev(heard[i - 1], E[p - 1].norm);
     // (plusieurs mots en trop d'affilée aussi : « بِاللَّهِ وَالْيَوْمِ الْآخِرِ وَلَوْ » pour « بِاللَّهِ وَلَوْ »,
     // s'ils sont tous de vrais mots et non des bouts de bruit)
+    // un morceau d'un seul mot hors du Coran (« كبح » entre deux versets) est du bruit
+    const noise = stops.has(i) && (i === 0 || stops.has(i - 1)) && !isQuranWord(w);
     const before = st.pending.every((x) => x.length >= insMin) ? st.pending : null;
-    if (insMin && !tail && w.length >= insMin && before && before.length + 1 < LEVELS[rec.level].extra && i + 1 < heard.length) {
+    if (insMin && !tail && !noise && w.length >= insMin && before && before.length + 1 < LEVELS[rec.level].extra && i + 1 < heard.length) {
       const nx = heard[i + 1];
       if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) {
         st.marks[p] = 'bad';
