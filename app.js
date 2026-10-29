@@ -1118,7 +1118,8 @@ function align(st, heard, raw = [], stops = new Set()) {
     if (anchor) { resync(st, p, anchor); advanceOk(st, p + anchor); advanceOk(st, p + anchor + 1); i++; continue; }
     // juste après un bip, un mot mal compris (coupé) est ignoré, mais pas un vrai mot du Coran
     // (3 lettres ou plus) : il peut être en trop (« بِاللَّهِ وَالْيَوْمَ الْآخِرَ وَلَوْ » repris après le bip)
-    if (st.grace > 0) { st.grace--; if (w.length < 3 || !isQuranWord(w)) continue; }
+    // (ni le mot que l'application vient de prononcer, capté par le micro : rec.echo)
+    if (st.grace > 0) { st.grace--; if (w.length < 3 || !isQuranWord(w) || w === rec.echo) continue; }
     // mot en trop : un mot hors du texte suivi du bon mot attendu. Traité comme un oubli :
     // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
     const insMin = LEVELS[rec.level].insMin;
@@ -1570,7 +1571,9 @@ function replayAt(i) {
   };
   // serveur : micro rouvert un peu après la fin du son (sinon il capte la fin du son du
   // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
-  const after = () => setTimeout(resume, rec.engine === 'server' ? 400 : 0);
+  // (1 s : avec 0,4 s, le micro captait encore le mot joué, « عَلَيْكُمْ » au début d'une reprise, 29/10/2026)
+  const after = () => setTimeout(resume, rec.engine === 'server' ? 1000 : 0);
+  rec.echo = null;
   const word = rec.words[i].text;
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
   // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
@@ -1582,6 +1585,7 @@ function replayAt(i) {
     playBeep(after);
   } else {
     micLog('prononciation du mot ' + (i + 1));
+    rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
     $('#heard').textContent = '🔊 الكلمة تُنطق هكذا';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['Le mot attendu :'], [word, 'ok']]
       : vowelFix || [['🔊 الكلمة تُنطق هكذا :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
