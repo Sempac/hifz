@@ -146,6 +146,9 @@ let QURAN = [];
 let current = null; // { title, ayahs: [{ s, a }] }
 const ayahKey = (x) => `${x.s}:${x.a}`;
 const ayahText = (x) => QURAN[x.s - 1].a[x.a - 1];
+// Tous les mots du Coran (normalisés), construits au premier besoin
+let quranVocab = null;
+const isQuranWord = (w) => (quranVocab ||= new Set(QURAN.flatMap((s) => s.a.flatMap((a) => a.split(/\s+/).map(norm))))).has(w);
 
 // Position de chaque mot dans l'audio mot par mot de Quran.com, pour les versets
 // où son découpage diffère du nôtre : { "sourate:verset": [positions] }
@@ -1070,8 +1073,9 @@ function align(st, heard, raw = [], stops = new Set()) {
     // plus loin grâce à 2 mots de suite, puis les mots intermédiaires sont vérifiés un par un
     const anchor = i + 1 < heard.length ? findAnchor(p, w, heard[i + 1]) : 0;
     if (anchor) { resync(st, p, anchor); advanceOk(st, p + anchor); advanceOk(st, p + anchor + 1); i++; continue; }
-    // juste après un bip, un mot mal compris (coupé) est ignoré
-    if (st.grace > 0) { st.grace--; continue; }
+    // juste après un bip, un mot mal compris (coupé) est ignoré, mais pas un vrai mot du Coran
+    // (3 lettres ou plus) : il peut être en trop (« بِاللَّهِ وَالْيَوْمَ الْآخِرَ وَلَوْ » repris après le bip)
+    if (st.grace > 0) { st.grace--; if (w.length < 3 || !isQuranWord(w)) continue; }
     // mot en trop : un mot hors du texte suivi du bon mot attendu. Traité comme un oubli :
     // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
     const insMin = LEVELS[rec.level].insMin;
