@@ -1029,8 +1029,20 @@ const VOWEL_NAME = { a: 'فَتْحَة ـَ', u: 'ضَمَّة ـُ', i: 'كَ�
 const bidi = (t) => `⁨${t}⁩`;
 const vowelName = (v) => bidi(VOWEL_NAME[v] || v);
 function vowelExplain(expected, heardRaw) {
+  const sw = letterSwap(norm(heardRaw), norm(expected));
+  if (sw) return `lettre « ${bidi(sw[0])} » au lieu de « ${bidi(sw[1])} »`;
   const d = vowelDiff(expected, heardRaw, true) || vowelDiff(expected, heardRaw, false);
   return d ? `lettre « ${bidi(d.letter)} » : ${vowelName(d.got)} au lieu de ${vowelName(d.exp)}` : '';
+}
+
+// Lettres proches que l'on confond en récitant : une seule lettre changée de la paire, le reste
+// identique → [lettre dite, lettre attendue] (null sinon)
+const CONFUSABLE = new Set(['صس', 'طت', 'ضد', 'ضظ', 'ظذ', 'ظز', 'ذز', 'قك', 'حه', 'ثس']);
+function letterSwap(heard, expected) {
+  if (heard.length !== expected.length) return null;
+  let d = null;
+  for (let k = 0; k < heard.length; k++) if (heard[k] !== expected[k]) { if (d) return null; d = [heard[k], expected[k]]; }
+  return d && (CONFUSABLE.has(d[0] + d[1]) || CONFUSABLE.has(d[1] + d[0])) ? d : null;
 }
 
 function vowelDiff(expected, heardRaw, stop = false) {
@@ -1087,7 +1099,17 @@ function align(st, heard, raw = [], stops = new Set()) {
     // ressemblance, sinon « أينما » passerait pour « أين » et « ما » pour un oubli
     const both = p + 1 < N ? E[p].norm + E[p + 1].norm : null;
     if (both && same(w, both) && lev(w, both) < lev(w, E[p].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
-    if (same(w, E[p].norm)) { advanceOk(st, p); continue; }
+    // serveur Hifz (texte fiable) : un autre vrai mot du Coran (« فَارْهَبُونِ » pour « فَاتَّقُونِ »,
+    // versets semblables) n'est pas une transcription approximative, la ressemblance ne suffit pas ;
+    // et une lettre proche (« بِالسَّبْرِ » pour « بِالصَّبْرِ ») est une faute de prononciation
+    const server = rec.engine === 'server';
+    // (sauf mot coupé par le serveur : « وان » + « تم » pour « وَأَنْتُمْ »)
+    const cutWord = E[p].norm.startsWith(w) || w.startsWith(E[p].norm);
+    if (!(server && !cutWord && isQuranWord(w) && lev(w, E[p].norm) >= 2) && same(w, E[p].norm)) {
+      advanceOk(st, p);
+      if (server && letterSwap(w, E[p].norm)) { st.marks[p] = 'bad'; st.vow[p] = raw[i] || w; }
+      continue;
+    }
     // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
     if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (waslAlone(w, p)) { advanceOk(st, p); continue; }
@@ -1577,10 +1599,10 @@ function replayAt(i) {
   const word = rec.words[i].text;
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
   // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
-  const vowelFix = vowelWord ? [['🔤 Voyelle : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [word, 'ok'], [vowelExplain(word, vowelWord), '', true]] : null;
+  const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [word, 'ok'], [vowelExplain(word, vowelWord), '', true]] : null;
   if (rec.retries[i] <= rec.beeps) {
     micLog('bip au mot ' + (i + 1));
-    $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Voyelle. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
+    $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Prononciation. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
     showFix(extraWord ? [['🔔 Mot en trop :'], [extraWord, 'bad'], ['Reprenez sans lui.']] : vowelFix || [['🔔 Erreur : reprenez à l\'endroit indiqué.']]);
     playBeep(after);
   } else {
