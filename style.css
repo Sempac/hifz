@@ -345,6 +345,21 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #view-recite .heard:empty { display: none; }
+#view-recite .coach {
+  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 72px); z-index: 6;
+  margin: 0 auto; width: fit-content; max-width: calc(100% - 104px); padding: 6px 12px; border-radius: 14px;
+  background: var(--hint-bg); color: var(--text); font-size: .85rem; text-align: center; pointer-events: none;
+}
+#view-recite .coach[hidden] { display: none; }
+/* jauge du micro : fine barre au-dessus du bas du cadre (orange : trop bas, rouge : saturé) */
+#view-recite .vu {
+  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 36px); z-index: 5;
+  height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--page-ink) 12%, transparent); overflow: hidden;
+}
+#view-recite .vu[hidden] { display: none; }
+#view-recite .vu i { display: block; height: 100%; width: 0; background: #3a9d5d; transition: width .15s linear; }
+#view-recite .vu.quiet i { background: #e0a030; }
+#view-recite .vu.loud i { background: #d64545; }
 #view-recite #no-speech { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }
 
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }

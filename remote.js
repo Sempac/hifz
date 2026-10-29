@@ -45,7 +45,7 @@ async function ensureMic() {
     const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
     await mic.ctx.audioWorklet.addModule(url);
     const node = new AudioWorkletNode(mic.ctx, 'pcm16k');
-    node.port.onmessage = (e) => { if (mic.sink) mic.sink(e.data); };
+    node.port.onmessage = (e) => { if (mic.sink) { mic.sink(e.data); coachFrames(e.data); } };
     mic.ctx.createMediaStreamSource(mic.stream).connect(node);
   }
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
@@ -58,6 +58,79 @@ function releaseMic() {
   mic.stream = null;
   mic.ctx = null;
   closeSocket();
+  coachReset();
+}
+
+// ---------- Conseils de récitation, comme un cheikh : volume et vitesse ----------
+// Le son est découpé en trames de 50 ms (niveau en dB). Une trame est de la voix si elle est à
+// moins de 20 dB du niveau fort récent (p95) : c'est la mesure qui a servi à fixer la zone de
+// vitesse sur des récitateurs (mots par seconde de voix, sourates 3 et 56) : al-Husary ≈ 0,5-0,7,
+// al-Minshawi ≈ 0,7-0,8, as-Sudais et ash-Shuraym ≈ 1,0-1,3. Les mots arrivent du serveur par
+// paquets et en retard : la mesure est faite sur 60 s, et « plus lentement » n'est dit qu'au-delà
+// de 1,6 (nettement plus vite que le plus rapide). Pas de « plus vite » : une vitesse basse vient
+// surtout de mots non compris, et réciter lentement ne gêne pas l'écoute. Un conseil ne
+// s'affiche que si le défaut dure, au plus une fois toutes les 25 s, sans interrompre la récitation.
+// (réglages vérifiés en rejouant les diagnostics du 29/10/2026)
+const COACH = { fast: 1.6, window: 60, quiet: -48, every: 25000 };
+const coach = { frames: [], words: [], said: 0, checked: 0, timer: 0 };
+
+function coachReset() {
+  coach.frames = []; coach.words = []; coach.said = 0; coach.checked = 0;
+  $('#vu').hidden = true;
+}
+
+const pct = (arr, q) => { const s = arr.slice().sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
+
+function coachFrames(buf) {
+  const now = Date.now();
+  for (let o = 0; o + 800 <= buf.length; o += 800) {
+    let sum = 0, clip = 0;
+    for (let k = o; k < o + 800; k++) { const v = buf[k]; sum += v * v; if (v >= 32000 || v <= -32000) clip++; }
+    coach.frames.push({ t: now, db: 10 * Math.log10(sum / 800 / 32768 ** 2 + 1e-12), clip });
+  }
+  while (coach.frames.length && coach.frames[0].t < now - COACH.window * 1000) coach.frames.shift();
+  // jauge : niveau des 200 dernières ms, de -60 dB (vide) à 0 dB (plein)
+  const last = Math.max(...coach.frames.slice(-4).map((f) => f.db));
+  const vu = $('#vu');
+  vu.hidden = false;
+  vu.firstElementChild.style.width = Math.max(0, Math.min(100, (last + 60) / 60 * 100)) + '%';
+  vu.className = 'vu' + (coach.frames.slice(-4).some((f) => f.clip) ? ' loud' : last < COACH.quiet ? ' quiet' : '');
+  if (now - coach.checked >= 1000) { coach.checked = now; coachCheck(now); }
+}
+
+// mots compris par le serveur (morceaux terminés), pour la vitesse
+function coachWords(text) {
+  const n = text.split(/\s+/).filter((t) => t.replace(/[^ء-يٱ]/g, '').length >= 2).length;
+  if (n) coach.words.push({ t: Date.now(), n });
+  while (coach.words.length && coach.words[0].t < Date.now() - COACH.window * 1000) coach.words.shift();
+}
+
+function coachCheck(now) {
+  // volume sur les 15 dernières secondes ; « trop bas » seulement si une voix faible est là en
+  // continu (au moins 30 % du temps au-dessus du bruit de fond), pas pendant une pause
+  const recent = coach.frames.filter((f) => f.t >= now - 15000);
+  if (recent.length < 280) return;
+  const db = recent.map((f) => f.db), top = pct(db, 0.95), floor = pct(db, 0.1);
+  let advice = '';
+  if (recent.filter((f) => f.t >= now - 4000 && f.clip > 8).length >= 4) advice = '🔊 Un peu moins fort, ou éloignez le téléphone';
+  else if (top < COACH.quiet && db.filter((d) => d > floor + 10).length >= 0.3 * db.length) advice = '🔉 Je vous entends mal : récitez un peu plus fort, ou rapprochez le téléphone';
+  else {
+    const all = coach.frames.map((f) => f.db), loud = pct(all, 0.95);
+    const voice = all.filter((d) => d > loud - 20).length * 0.05;
+    const words = coach.words.reduce((s, w) => s + w.n, 0);
+    if (voice >= 12 && words >= 10) {
+      const rate = words / voice;
+      if (rate > COACH.fast) advice = `🐢 Un peu plus lentement, pour que je saisisse chaque mot (${rate.toFixed(2)} mot/s)`;
+    }
+  }
+  if (!advice || now - coach.said < COACH.every) return;
+  coach.said = now;
+  micLog('conseil : ' + advice);
+  const el = $('#coach');
+  el.textContent = advice;
+  el.hidden = false;
+  clearTimeout(coach.timer);
+  coach.timer = setTimeout(() => { el.hidden = true; }, 6000);
 }
 
 // Une seule connexion au serveur, ouverte toute la récitation : après un rappel, on ne se
@@ -127,6 +200,10 @@ class ServerRecognizer {
   }
 
   deliver(msg) {
+    // morceaux nouvellement terminés : comptés pour la vitesse
+    const finals = (msg.segments || []).filter((s) => s.final);
+    finals.slice(this.finals || 0).forEach((s) => coachWords(s.text));
+    this.finals = Math.max(this.finals || 0, finals.length);
     const results = (msg.segments || []).map((s) => Object.assign([{ transcript: s.text, confidence: 1 }], { isFinal: s.final }));
     if (results.length && this.onresult) this.onresult({ results, resultIndex: 0 });
   }
@@ -145,7 +222,7 @@ class ServerRecognizer {
 
   // pause (rappel, arrêt) : on cesse d'envoyer le son, la connexion reste ouverte
   abort() {
-    if (conn.listener === this) { conn.listener = null; mic.sink = null; }
+    if (conn.listener === this) { conn.listener = null; mic.sink = null; $('#vu').hidden = true; }
     this.end();
   }
 
