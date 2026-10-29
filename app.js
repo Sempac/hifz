@@ -20,12 +20,6 @@ function norm(w) {
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .replace(/ء/g, '')
-    // lettres emphatiques et leurs voisines : le modèle les confond selon la voix
-    // (« صِرٌّ » écrit « سِرٌّ », « عَظِيمٌ » écrit « عَطِيمٌ ») ; une erreur de mémoire change le mot, pas
-    // seulement l'emphase, donc on ne les distingue pas
-    .replace(/ص/g, 'س')
-    .replace(/ط/g, 'ت')
-    .replace(/[ضظذ]/g, 'د')
     .replace(/[^ء-ي]/g, '');
 }
 
@@ -118,10 +112,12 @@ function nunForms(p) {
   const nun = /نْ?$/.test(t), tanwin = /[ًٌٍ]/.test(t);
   if (!(nun || tanwin)) return [];
   const added = first === 'ب' ? 'م' : 'ينمولر'.includes(first) ? first : null;
-  if (!added) return [];
   const base = nun ? e.norm.slice(0, -1) : e.norm;
   // tanwin : l'alif ou le ى qui le porte ne se prononce pas (« هُدًى » → « هُدَ »)
   const bases = tanwin ? [base, base.replace(/[اي]$/, '')] : [base];
+  // الإظهار والإخفاء : le tanwin s'entend « n » quand on enchaîne, et la reconnaissance l'écrit
+  // (« صِرٌّ أَصَابَتْ » → « صِرُّنْ ») ; sans ن, c'est l'arrêt (sukun) ou une simple variante
+  if (!added) return tanwin ? bases.map((b) => b + 'ن').filter((f) => f !== e.norm) : [];
   return bases.flatMap((b) => [b, b + added]).filter((f) => f.length >= 1 && f !== e.norm);
 }
 
@@ -1353,10 +1349,9 @@ function setShown(st, commit) {
 
 // ---------- Reprise sur erreur ----------
 // Sur une erreur, le micro se coupe et l'utilisateur reprend au mot faux. Les rec.beeps premières
-// fois, un simple bip (il cherche seul) ; ensuite l'application récite le passage qui précède
-// (depuis le début du verset, RAPPEL_MAX mots au plus). Après le rappel, le mot reste rouge
-// sans nouvelle interruption (repriseMax).
-const RAPPEL_MAX = 2;
+// fois, un simple bip (il cherche seul) ; ensuite l'application annonce « الكلمة تُنطق هكذا » et fait
+// entendre le mot récité (audio mot par mot). Après cela, le mot reste rouge sans nouvelle
+// interruption (repriseMax).
 // Un seul lecteur pour tous les rappels : l'iPhone n'autorise un lecteur à jouer seul
 // (sans toucher l'écran) que s'il a déjà joué une fois suite à un toucher.
 const sayEl = new Audio();
@@ -1392,16 +1387,23 @@ function playBeep(done) {
   sayEl.play().catch(() => { sayAudio = null; done(); });
 }
 
-// Indices des mots à réciter avant le mot i.
-function rappelWords(i) {
-  const last = i - 1;
-  let s = last;
-  const sameAyah = (u, v) => u.s === v.s && u.ayah === v.ayah;
-  while (s > 0 && sameAyah(rec.words[s - 1], rec.words[last]) && last - s < RAPPEL_MAX - 1) s--;
-  const out = [];
-  for (let j = s; j <= last; j++) out.push(j);
-  return out;
+// Phrase dite par la voix de synthèse arabe du téléphone ; sans voix arabe (ou si elle ne répond
+// pas), on passe directement à la suite.
+function sayPhrase(text, done) {
+  const tts = window.speechSynthesis;
+  const voice = tts?.getVoices().find((v) => v.lang.startsWith('ar'));
+  if (!voice) { done(); return; }
+  let over = false;
+  const end = () => { if (!over) { over = true; done(); } };
+  const u = new SpeechSynthesisUtterance(text);
+  u.voice = voice;
+  u.lang = voice.lang;
+  u.onend = u.onerror = end;
+  setTimeout(end, 4000);
+  tts.cancel();
+  tts.speak(u);
 }
+window.speechSynthesis?.getVoices(); // Chrome charge la liste des voix au premier appel
 
 // Récite les mots un par un (audio mot par mot), en les surlignant.
 function sayWords(idxs, done) {
@@ -1433,7 +1435,7 @@ const REPLAY_CONFIRM = 2;
 // dans la récitation (les erreurs restent marquées, sans interrompre).
 const REPLAY_SETTLE = 3;
 
-// interruptions au plus pour un même mot : les bips puis un rappel (2 rappels s'il n'y a pas de bip)
+// interruptions au plus pour un même mot : les bips puis la prononciation (2 fois s'il n'y a pas de bip)
 const repriseMax = () => Math.max(2, rec.beeps + 1);
 
 function checkReplay(st, final) {
@@ -1491,17 +1493,15 @@ function replayAt(i) {
         ? `🔔 Voyelle : « ${vowelWord} ». Reprenez ce mot.`
         : '🔔 Erreur : reprenez à l\'endroit indiqué.';
     playBeep(after);
-  } else if (i > 0) {
-    micLog('rappel au mot ' + (i + 1));
-    $('#heard').textContent = extraWord
-      ? `➕ Mot en trop : « ${extraWord} ». Écoutez le rappel, puis reprenez.`
-      : vowelWord
-        ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${rec.words[i].text} ». Écoutez le rappel, puis reprenez.`
-        : 'Écoutez le rappel, puis continuez au mot suivant.';
-    sayWords(rappelWords(i), after);
   } else {
-    $('#heard').textContent = 'Erreur sur le premier mot : reprenez.';
-    setTimeout(resume, 500);
+    micLog('prononciation du mot ' + (i + 1));
+    const word = rec.words[i].text;
+    $('#heard').textContent = extraWord
+      ? `➕ Mot en trop : « ${extraWord} ». Le mot attendu se prononce ainsi : « ${word} ». Reprenez.`
+      : vowelWord
+        ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${word} ». Écoutez, puis reprenez ce mot.`
+        : `🔊 الكلمة تُنطق هكذا : « ${word} ». Écoutez, puis reprenez ce mot.`;
+    sayPhrase('الكلمة تُنطق هكذا', () => (rec.pausing ? sayWords([i], after) : null));
   }
 }
 
