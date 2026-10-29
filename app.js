@@ -1086,7 +1086,14 @@ function align(st, heard, raw = [], stops = new Set()) {
     // lettre isolée (bruit, fin du son d'un rappel) : ignorée, sauf si c'est le mot attendu (ق، ص، ن)
     // (ou « مِنْ » assimilé : « م » devant « رَبِّهِمْ »)
     if (w.length <= 1 && E[p].norm.length > 1 && !nunAlone(w, p)) continue;
-    if (w === E[p].norm) { advanceOk(st, p); checkVowels(st, p, raw[i], stops.has(i)); continue; }
+    if (w === E[p].norm) {
+      // serveur : un autre vrai mot du Coran dit juste avant à sa place (« وَإِيَّايَ فَارْهَبُونِ » puis
+      // « وَإِيَّايَ فَاتَّقُونِ ») : se reprendre soi-même n'efface pas l'erreur, comme devant un cheikh
+      const wrong = rec.engine === 'server' ? st.pending.filter((x) => x.length >= 3 && isQuranWord(x) && lev(x, w) >= 2) : [];
+      advanceOk(st, p);
+      if (wrong.length) { st.marks[p] = 'bad'; st.heard[p] = wrong; } else checkVowels(st, p, raw[i], stops.has(i));
+      continue;
+    }
     if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
     // (ex. « لم يولد » ne doit pas valider « يلد »)
