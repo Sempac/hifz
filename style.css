@@ -351,6 +351,16 @@ body {
   background: var(--hint-bg); color: var(--text); font-size: .85rem; text-align: center; pointer-events: none;
 }
 #view-recite .coach[hidden] { display: none; }
+/* signe d'arrêt : badge au-dessus des conseils + trait à la fin du mot où s'arrêter (à gauche, texte de droite à gauche) */
+#view-recite .waqf-sign {
+  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 108px); z-index: 6;
+  margin: 0 auto; width: fit-content; padding: 4px 12px; border-radius: 14px; pointer-events: none;
+  background: var(--current); color: #fff; font-size: .9rem; font-weight: 600;
+}
+#view-recite .waqf-sign[hidden] { display: none; }
+.w.waqf, .mw.waqf { box-shadow: -5px 0 0 0 var(--current); animation: waqf-pulse 1s ease-in-out infinite alternate; }
+.w.waqf.current, .mw.waqf.current { box-shadow: 0 0 0 2px var(--current), -7px 0 0 0 var(--current); }
+@keyframes waqf-pulse { from { opacity: 1; } to { opacity: .55; } }
 /* jauge du micro : fine barre au-dessus du bas du cadre (orange : trop bas, rouge : saturé) */
 #view-recite .vu {
   position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 36px); z-index: 5;

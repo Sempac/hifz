@@ -571,6 +571,7 @@ const rec = {
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
   beeps: store.get('beeps', 1),      // bips (on reprend seul) avant le rappel prononcé
+  waqf: store.get('waqf', 'rec'),    // signes d'arrêt (WAQF_SHOWN)
   // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
   lastEventAt: 0,       // dernière nouvelle de la reconnaissance (chien de garde iPhone / iPad)
@@ -608,6 +609,26 @@ const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, i
 const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, grace: st.grace, graceSkip: st.graceSkip });
 const GRACE_WORDS = 2;
 
+// ---------- Signes d'arrêt (comme le cheikh qui fait signe de s'arrêter) ----------
+// Signes de waqf du mushaf (mot qui les précède). Le signe s'affiche dès l'avant-dernier mot
+// avant l'arrêt (la position n'est connue qu'avec un peu de retard). C'est une invitation :
+// continuer n'est jamais compté comme une erreur. Réglage rec.waqf :
+// off = aucun, end = fins de verset, rec = + ۘ (obligatoire) et ۗ (préférable), all = + ۚ (permis).
+// Jamais sur ۖ (continuer préférable), ۙ (ne pas s'arrêter), ۛ (l'un des deux) ni ۜ (سكتة).
+const WAQF_MARKS = { 'ۘ': 'lazim', 'ۗ': 'qila', 'ۚ': 'jaiz', 'ۖ': 'sila', 'ۙ': 'la', 'ۛ': 'muanaqa', 'ۜ': 'sakta' };
+const WAQF_SHOWN = { off: [], end: ['end'], rec: ['end', 'lazim', 'qila'], all: ['end', 'lazim', 'qila', 'jaiz'] };
+const WAQF_LABEL = { end: '⏸ Fin du verset', lazim: '⏸ ۘ Arrêt obligatoire', qila: '⏸ ۗ Arrêt préférable', jaiz: '⏸ ۚ Arrêt permis' };
+function waqfAhead(pos) {
+  const kinds = WAQF_SHOWN[rec.waqf] || [];
+  for (const j of [pos, pos + 1]) if (j < rec.words.length - 1 && kinds.includes(rec.words[j].stop)) return j;
+  return -1;
+}
+function showWaqf(j) {
+  const el = $('#waqf-sign');
+  el.hidden = j < 0;
+  if (j >= 0) el.textContent = WAQF_LABEL[rec.words[j].stop];
+}
+
 function openRecite() {
   $('#recite-title').textContent = rangeTitle();
   const box = $('#recite-text');
@@ -623,7 +644,11 @@ function openRecite() {
     let k = 0;
     for (const t of ayahText(x).split(/\s+/)) {
       const nw = norm(t);
-      if (!nw) continue; // signes isolés (ex. ۞)
+      if (!nw) { // signes isolés (ex. ۞) ; un signe de waqf s'applique au mot qui le précède
+        const prev = rec.words[rec.words.length - 1];
+        if (WAQF_MARKS[t] && prev && prev.s === x.s && prev.ayah === n) prev.stop = WAQF_MARKS[t];
+        continue;
+      }
       const span = document.createElement('span');
       span.className = 'w';
       span.textContent = t;
@@ -635,6 +660,8 @@ function openRecite() {
       rec.words.push({ text: t, norm: nw, s: x.s, ayah: n, k: k++, wasl: idx > 0 && /^[اٱ]/.test(t.normalize('NFC')) });
       rec.spans.push(span);
     }
+    const last = rec.words[rec.words.length - 1];
+    if (last && last.ayah === n && last.stop !== 'sakta') last.stop = 'end'; // fin de verset (sauf سكتة, 18:1 et 69:28)
     const mark = document.createElement('span');
     mark.className = 'mark';
     mark.textContent = `﴿${arNum(n)}﴾`;
@@ -686,7 +713,7 @@ const MARK_RANK = { ok: 1, hint: 2, fixed: 3, unsure: 4, bad: 5 };
 
 // Affichage dans le livre : un mot du livre prend la pire marque de ses mots du texte ;
 // le livre tourne tout seul jusqu'à la page du mot attendu.
-function renderBook(st) {
+function renderBook(st, waqf = -1) {
   let target = null;
   rec.glyphWords.forEach((idxs, g) => {
     let cls = 'mw';
@@ -698,6 +725,7 @@ function renderBook(st) {
       cls += rec.peeked.has(st.pos) ? ' peek current' : ' hidden current';
       target = g;
     } else cls += ' hidden';
+    if (idxs.includes(waqf)) cls += ' waqf';
     g.className = cls;
   });
   rec.lensTarget = st.pos < rec.words.length ? target : null;
@@ -1145,13 +1173,16 @@ function score(st) {
 
 function render() {
   const st = rec.shown;
-  if (rec.book) renderBook(st);
+  const waqf = $('#summary').hidden ? waqfAhead(st.pos) : -1;
+  showWaqf(waqf);
+  if (rec.book) renderBook(st, waqf);
   else {
     rec.spans.forEach((el, i) => {
       let cls = 'w';
       if (i < st.pos) cls += ' ' + markOf(st, i);
       else if (i === st.pos && rec.peeked.has(i)) cls += ' peek current';
       else cls += ' hidden' + (i === st.pos ? ' current' : '');
+      if (i === waqf) cls += ' waqf';
       el.className = cls;
     });
     const cur = rec.spans[st.pos];
@@ -1839,6 +1870,12 @@ $('#opt-delay').checked = rec.showDelay;
 $('#opt-delay').addEventListener('change', () => {
   rec.showDelay = $('#opt-delay').checked;
   store.set('showDelay', rec.showDelay);
+});
+
+$('#waqf').value = rec.waqf;
+$('#waqf').addEventListener('change', () => {
+  rec.waqf = $('#waqf').value;
+  store.set('waqf', rec.waqf);
 });
 
 $('#beeps').value = String(rec.beeps);

@@ -165,6 +165,7 @@
     <div id="heard" class="heard" dir="rtl" lang="ar"></div>
     <!-- conseils de récitation (volume, vitesse) et jauge du micro, serveur Hifz seulement -->
     <div id="coach" class="coach" hidden></div>
+    <div id="waqf-sign" class="waqf-sign" hidden></div>
     <div id="vu" class="vu" hidden><i></i></div>
     <!-- loupe : la ligne en cours (et ses voisines) agrandie, qui suit la récitation -->
     <div id="lens" class="lens" hidden><div class="lens-in"></div></div>
@@ -223,6 +224,14 @@
           </select>
         </label>
         <label class="opt"><input type="checkbox" id="opt-replay"> 🔁 Rappel sur erreur : reprendre au mot faux, puis l'entendre prononcé</label>
+        <label class="set-row">⏸ Signes d'arrêt
+          <select id="waqf" aria-label="Signes d'arrêt">
+            <option value="off">Aucun</option>
+            <option value="end">Fins de verset</option>
+            <option value="rec">Fins de verset + ۘ et ۗ</option>
+            <option value="all">Tous les arrêts permis (+ ۚ)</option>
+          </select>
+        </label>
         <label class="set-row">🔔 Bips avant la prononciation
           <select id="beeps" aria-label="Bips avant la prononciation">
             <option value="0">Aucun (prononciation tout de suite)</option>
@@ -238,7 +247,7 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help" id="recite-title"></p>
-        <p class="sel-help">Version 19</p>
+        <p class="sel-help">Version 20</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>
