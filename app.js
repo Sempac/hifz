@@ -57,7 +57,12 @@ function same(a, b) {
   // l'article « ال » commun ne doit pas compter dans la ressemblance (الدنيا ≠ الرحيم)
   if (a.startsWith('ال') && b.startsWith('ال') && a.length > 3 && b.length > 3) { a = a.slice(2); b = b.slice(2); }
   if (Math.min(a.length, b.length) <= 2) return false;
-  return lev(a, b) / Math.max(a.length, b.length) <= LEVELS[rec.level].tol;
+  // la part tolérée se compte aussi sur le plus court : « وَالْيَوْمِ » n'est pas « وَلَوْ »
+  // (3 lettres de différence sur 6, mais « ولو » n'en a que 3) ; sauf mot coupé par le modèle
+  // (« وَأَنْ » + « تُمْ » pour « وَأَنْتُمْ ») : le début du mot est alors entendu tel quel
+  const d = lev(a, b), tol = LEVELS[rec.level].tol;
+  const cut = a.startsWith(b) || b.startsWith(a);
+  return d / Math.max(a.length, b.length) <= tol && (cut || d <= Math.max(1, Math.floor(Math.min(a.length, b.length) * tol)));
 }
 
 // Liaison (wasl) : un mot qui commence par l'alif de liaison (اللَّهِ, الْأَرْضِ, اسْتَغْفِرُوا…) perd
@@ -992,6 +997,8 @@ function vowelError(expected, heardRaw, stop = false) {
   for (let k = 0; k < a.length; k++) {
     if (!a[k].v || pair[k] === undefined) continue;
     const hv = b[pair[k]].v;
+    // signe absent (« الْأُمورُ ») : le modèle ne l'a pas écrit, ce n'est pas une autre voyelle
+    if (!hv) continue;
     if (k === last) {
       // arrêt (fin de verset, ou pause en plein verset) : la voyelle finale n'est pas prononcée
       // et ce que le modèle écrit à sa place n'a pas de sens (« الْحَكِيمِ » pour « الْحَكِيمُ »)
@@ -1068,11 +1075,14 @@ function align(st, heard, raw = [], stops = new Set()) {
     const insMin = LEVELS[rec.level].insMin;
     // un bout de mot coupé en deux (fin du mot précédent, ex. « الْآخِي » + « رِينَ ») n'est pas un mot en trop
     const tail = i > 0 && p > 0 && same(heard[i - 1] + w, E[p - 1].norm);
-    if (insMin && !tail && w.length >= insMin && !st.pending.length && i + 1 < heard.length) {
+    // (plusieurs mots en trop d'affilée aussi : « بِاللَّهِ وَالْيَوْمِ الْآخِرِ وَلَوْ » pour « بِاللَّهِ وَلَوْ »,
+    // s'ils sont tous de vrais mots et non des bouts de bruit)
+    const before = st.pending.every((x) => x.length >= insMin) ? st.pending : null;
+    if (insMin && !tail && w.length >= insMin && before && before.length + 1 < LEVELS[rec.level].extra && i + 1 < heard.length) {
       const nx = heard[i + 1];
       if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) {
         st.marks[p] = 'bad';
-        st.ins[p] = w;
+        st.ins[p] = [...before, w].join(' ');
         st.pos = p + 1;
         st.extra = 0;
         st.pending = [];
