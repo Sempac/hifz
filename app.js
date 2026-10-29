@@ -574,6 +574,7 @@ const rec = {
   lastResultAt: 0,      // heure de la dernière réponse du micro
   noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
   retries: {},          // mot → nombre de reprises
+  firstErr: {},         // mot → nature de l'erreur à la première reprise (bilan)
   pausing: false,       // micro coupé le temps de faire entendre un mot
   committed: null,  // état validé (résultats finaux)
   shown: null,      // état affiché (peut inclure un résultat provisoire)
@@ -902,6 +903,7 @@ function resetRecite() {
   rec.flagged.clear();
   rec.reviewOut = null;
   rec.retries = {};
+  rec.firstErr = {};
   rec.lastReplayAt = -1;
   rec.noReplay.clear();
   $('#summary').hidden = true;
@@ -1387,18 +1389,21 @@ function playBeep(done) {
   sayEl.play().catch(() => { sayAudio = null; done(); });
 }
 
-// Phrase dite par la voix de synthèse arabe du téléphone ; sans voix arabe (ou si elle ne répond
-// pas), on passe directement à la suite.
+// Phrase dite par la voix de synthèse du téléphone, en arabe : la voix arabe si elle est listée,
+// sinon on demande l'arabe au moteur (Android en télécharge une au besoin). S'il ne répond pas,
+// on passe à la suite. sayPhrase.info : ce qui s'est passé (journal du micro).
 function sayPhrase(text, done) {
   const tts = window.speechSynthesis;
-  const voice = tts?.getVoices().find((v) => v.lang.startsWith('ar'));
-  if (!voice) { done(); return; }
+  if (!tts) { sayPhrase.info = 'voix : synthèse vocale absente'; done(); return; }
+  const voice = tts.getVoices().find((v) => v.lang.toLowerCase().startsWith('ar'));
+  sayPhrase.info = 'voix : ' + (voice ? voice.name : 'aucune voix arabe listée (' + tts.getVoices().length + ' voix)');
   let over = false;
   const end = () => { if (!over) { over = true; done(); } };
   const u = new SpeechSynthesisUtterance(text);
-  u.voice = voice;
-  u.lang = voice.lang;
-  u.onend = u.onerror = end;
+  if (voice) u.voice = voice;
+  u.lang = voice ? voice.lang : 'ar-SA';
+  u.onend = end;
+  u.onerror = (e) => { micLog('voix : erreur ' + e.error); end(); };
   setTimeout(end, 4000);
   tts.cancel();
   tts.speak(u);
@@ -1455,6 +1460,7 @@ function replayAt(i) {
   rec.lastReplayAt = i;
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
+  rec.firstErr[i] ||= errorKind(rec.shown, i); // pour le bilan, même si le mot est retrouvé ensuite
   const r = rec.recognition;
   rec.recognition = null;
   if (r) { try { r.abort(); } catch { /* déjà arrêté */ } }
@@ -1502,37 +1508,87 @@ function replayAt(i) {
         ? `🔤 Voyelle : « ${vowelWord} » au lieu de « ${word} ». Écoutez, puis reprenez ce mot.`
         : `🔊 الكلمة تُنطق هكذا : « ${word} ». Écoutez, puis reprenez ce mot.`;
     sayPhrase('الكلمة تُنطق هكذا', () => (rec.pausing ? sayWords([i], after) : null));
+    micLog(sayPhrase.info);
   }
 }
 
 const markOf = (st, i) => (rec.forcedBad.has(i) ? 'bad' : rec.overrides.has(i) ? 'ok' : st.marks[i] || 'ok');
+
+// Nature d'une erreur sur le mot i : oubli (rien entendu à sa place), mot en trop avant lui,
+// autre mot (entendu, sans ressemblance : erreur de mémoire), ou mal prononcé (voyelle fausse,
+// ou mot entendu proche du bon, ex. « سِرٌّ » pour « صِرٌّ »).
+function errorKind(st, i) {
+  if (st.marks[i] === 'hint') return 'hint';
+  if (st.ins[i]) return 'extra';
+  if (st.vow[i]) return 'pron';
+  const e = rec.words[i].norm, h = st.heard[i] || [];
+  if (!h.length) return 'forgot';
+  return h.some((x) => lev(x, e) / Math.max(x.length, e.length) <= 0.5) ? 'pron' : 'subst';
+}
+
+const KIND_LABEL = {
+  forgot: 'oublié', subst: 'autre mot', extra: 'mot en trop avant', hint: 'indice', pron: 'mal prononcé',
+};
+
+function playWord(i) {
+  sayEl.onended = sayEl.onerror = null;
+  sayEl.src = wordAudioUrl(rec.words[i]);
+  sayEl.play().catch(() => { /* hors ligne */ });
+}
 
 function finish() {
   $('#lens').hidden = true;
   stopListening();
   const marks = rec.words.map((_, i) => markOf(rec.shown, i));
   const ok = marks.filter((m) => m === 'ok').length;
-  const bad = marks.filter((m) => m === 'bad').length;
-  const hint = marks.filter((m) => m === 'hint').length;
   const unsure = marks.filter((m) => m === 'unsure').length;
-  const fixed = marks.filter((m) => m === 'fixed').length;
   const pct = Math.round((ok / Math.max(1, rec.words.length - unsure)) * 100);
   // progrès des mots « À revoir » : une seule fois par récitation (finish peut être rappelé)
   if (rec.reviewOut === null) rec.reviewOut = updateReview();
   const flagged = [...rec.flagged].sort((x, y) => x - y).map((i) => rec.words[i]);
-  $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} correct · ❌ ${bad} erreur(s) · 💡 ${hint} indice(s)`
-    + (fixed ? ` · 🔁 ${fixed} corrigé(s) après reprise` : '')
-    + (unsure ? ` · ${unsure} non entendu(s)` : '')
+
+  // les mots à retravailler, par nature d'erreur : mémoire (oubli, autre mot, mot en trop,
+  // indice), prononciation, et mots justes que le micro avait mal entendus (validés en les touchant)
+  const memory = [], pron = [], misheard = [];
+  rec.words.forEach((w, i) => {
+    const m = marks[i];
+    if (rec.overrides.has(i)) { misheard.push({ i }); return; }
+    if (m === 'ok' || rec.forcedBad.has(i)) return; // marqué faux à la main : dans « À revoir »
+    const fixed = m === 'fixed';
+    const kind = fixed ? rec.firstErr[i] || 'forgot' : m === 'unsure' ? 'forgot' : errorKind(rec.shown, i);
+    const heard = fixed ? '' : rec.shown.ins[i] || rec.shown.vow[i] || (kind !== 'forgot' && (rec.shown.heard[i] || []).join(' ')) || '';
+    (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard });
+  });
+  const line = ({ i, kind, fixed, heard }) => {
+    const w = rec.words[i];
+    return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
+      + `<span class="rw" dir="rtl">${w.text}</span> <small>${QURAN[w.s - 1].en} ${w.ayah}`
+      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '')
+      + (fixed ? ' · retrouvé après le bip' : '') + '</small></div>';
+  };
+  const group = (title, list, help, id) => (list.length
+    ? `<div class="rv"><b>${title} : ${list.length}</b><br><small>${help}</small>${list.map(line).join('')}`
+      + (id ? `<button id="${id}" class="btn primary">🎤 Réciter à nouveau ces versets</button>` : '') + '</div>'
+    : '');
+
+  $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} mot(s) juste(s) du premier coup`
     + (rec.reviewOut ? `<br>🎉 ${rec.reviewOut} mot(s) sorti(s) de « À revoir »` : '')
+    + group('🧠 Mémoire', memory, 'Mots oubliés, remplacés ou ajoutés : réciter ces versets encore.', 'btn-redo-memory')
+    + group('🗣 Prononciation', pron, 'Écoutez (🔊) puis répétez le mot.', 'btn-redo-pron')
+    + group('🎙 Mal entendus par le micro', misheard, 'Vous les avez touchés pour les valider : ils comptent justes.')
     + (flagged.length
       ? `<div class="rv">🚩 À revoir : ${flagged.length} mot(s)<br>${flagged.map((w) => `<span class="rw" dir="rtl">${w.text}</span> <small>(${QURAN[w.s - 1].en} ${w.ayah})</small>`).join('<br>')}</div>`
         + '<button id="btn-review-these" class="btn primary">🎤 Réviser ces versets</button>'
       : '');
   $('#summary').hidden = false;
-  $('#btn-review-these')?.addEventListener('click', () => {
-    current = { title: 'À revoir', ayahs: reviewAyahs(flagged.map((w) => ({ s: w.s, a: w.ayah, k: w.k }))) };
+  $('#summary').querySelectorAll('.say-w').forEach((b) => b.addEventListener('click', () => playWord(+b.dataset.i)));
+  const redo = (title, list) => {
+    current = { title, ayahs: reviewAyahs(list.map(({ i }) => ({ s: rec.words[i].s, a: rec.words[i].ayah, k: rec.words[i].k }))) };
     openRecite();
-  });
+  };
+  $('#btn-redo-memory')?.addEventListener('click', () => redo('Mémoire', memory));
+  $('#btn-redo-pron')?.addEventListener('click', () => redo('Prononciation', pron));
+  $('#btn-review-these')?.addEventListener('click', () => redo('À revoir', flagged.map((w) => ({ i: rec.words.indexOf(w) }))));
 }
 
 // Texte entendu depuis le début de la session. Sur Android, un segment peut répéter

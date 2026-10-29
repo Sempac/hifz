@@ -225,6 +225,9 @@ body {
 .summary .rv { margin-top: 10px; text-align: right; }
 .summary .rv .rw { font-family: "Amiri Quran", serif; font-size: 1.3rem; color: var(--bad); }
 .summary .btn { margin-top: 10px; }
+.summary .rl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-top: 6px; }
+.summary .rl small { color: var(--muted); }
+.summary .say-w { border: 0; background: transparent; font-size: 1.1rem; cursor: pointer; padding: 2px 4px; }
 .fab span { font-family: "Amiri Quran", serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .severity {
