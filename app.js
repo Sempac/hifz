@@ -103,7 +103,13 @@ function waslJoined(w, p) {
   const E = rec.words;
   if (p + 1 >= E.length || !E[p + 1].wasl) return false;
   const sw = squeeze(w);
-  return beforeWasl(p).some((x) => waslForms(E[p + 1].norm).some((f) => same(sw, squeeze(x + f))));
+  return beforeWasl(p).some((x) => startsLike(sw, squeeze(x)) && waslForms(E[p + 1].norm).some((f) => same(sw, squeeze(x + f))));
+}
+
+// deux mots entendus collés : le début du mot entendu doit bien être le premier mot (« كَالْكِتَابُ »,
+// ذَٰلِكَ à peine dit, n'est pas « ذلك » + « الكتاب », même si l'ensemble se ressemble, 30/10/2026)
+function startsLike(w, first) {
+  return lev(w.slice(0, first.length), first) <= Math.floor(first.length * LEVELS[rec.level].tol);
 }
 
 // النون الساكنة والتنوين devant le mot suivant : le ن s'assimile à sa première lettre (الإدغام,
@@ -1149,7 +1155,7 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // deux mots attendus entendus collés (« أَيْنَمَا » pour « أَيْنَ مَا ») : avant la simple
     // ressemblance, sinon « أينما » passerait pour « أين » et « ما » pour un oubli
     const both = p + 1 < N ? E[p].norm + E[p + 1].norm : null;
-    if (both && same(w, both) && lev(w, both) < lev(w, E[p].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
+    if (both && same(w, both) && lev(w, both) < lev(w, E[p].norm) && startsLike(w, E[p].norm)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     // serveur Hifz (texte fiable) : un autre vrai mot du Coran (« فَارْهَبُونِ » pour « فَاتَّقُونِ »,
     // versets semblables) n'est pas une transcription approximative, la ressemblance ne suffit pas ;
     // et une lettre proche (« بِالسَّبْرِ » pour « بِالصَّبْرِ ») est une faute de prononciation
