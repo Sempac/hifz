@@ -1495,41 +1495,6 @@ function playBeep(done) {
   sayEl.play().catch(() => { sayAudio = null; done(); });
 }
 
-// « الكلمة تُنطق هكذا » : enregistrement phrase.mp3, joué par le même lecteur que les rappels
-// (iPhone). S'il manque, voix de synthèse du téléphone (sayPhraseTts).
-function sayPhrase(text, done) {
-  sayPhrase.info = 'voix : phrase.mp3';
-  sayAudio = sayEl;
-  let over = false;
-  const end = () => { if (!over) { over = true; sayAudio = null; done(); } };
-  const fail = () => { if (!over) { over = true; sayAudio = null; sayPhraseTts(text, done); micLog(sayPhrase.info); } };
-  sayEl.onended = end;
-  sayEl.onerror = fail;
-  sayEl.src = 'phrase.mp3';
-  sayEl.play().catch(fail);
-}
-
-// Voix de synthèse du téléphone, en arabe : la voix arabe si elle est listée,
-// sinon on demande l'arabe au moteur (Android en télécharge une au besoin). S'il ne répond pas,
-// on passe à la suite. sayPhrase.info : ce qui s'est passé (journal du micro).
-function sayPhraseTts(text, done) {
-  const tts = window.speechSynthesis;
-  if (!tts) { sayPhrase.info = 'voix : synthèse vocale absente'; done(); return; }
-  const voice = tts.getVoices().find((v) => v.lang.toLowerCase().startsWith('ar'));
-  sayPhrase.info = 'voix : ' + (voice ? voice.name : 'aucune voix arabe listée (' + tts.getVoices().length + ' voix)');
-  let over = false;
-  const end = () => { if (!over) { over = true; done(); } };
-  const u = new SpeechSynthesisUtterance(text);
-  if (voice) u.voice = voice;
-  u.lang = voice ? voice.lang : 'ar-SA';
-  u.onend = end;
-  u.onerror = (e) => { micLog('voix : erreur ' + e.error); end(); };
-  setTimeout(end, 4000);
-  tts.cancel();
-  tts.speak(u);
-}
-window.speechSynthesis?.getVoices(); // Chrome charge la liste des voix au premier appel
-
 // Récite les mots un par un (audio mot par mot), en les surlignant.
 function sayWords(idxs, done) {
   const urls = idxs.map((j) => wordAudioUrl(rec.words[j]));
@@ -1625,11 +1590,10 @@ function replayAt(i) {
   } else {
     micLog('prononciation du mot ' + (i + 1));
     rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
-    $('#heard').textContent = '🔊 الكلمة تُنطق هكذا';
+    $('#heard').textContent = '🔊 Écoutez le mot';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['Le mot attendu :'], [word, 'ok']]
-      : vowelFix || [['🔊 الكلمة تُنطق هكذا :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
-    sayPhrase('الكلمة تُنطق هكذا', () => (rec.pausing ? sayWords([i], after) : null));
-    micLog(sayPhrase.info);
+      : vowelFix || [['🔊 Le mot :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
+    sayWords([i], after);
   }
 }
 
