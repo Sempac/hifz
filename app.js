@@ -1084,8 +1084,12 @@ function checkVowels(st, j, heardRaw, pause = false) {
 
 // Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
 // stops : indices des mots entendus suivis d'une pause (voyelle finale non exigée).
-function align(st, heard, raw = [], stops = new Set()) {
+// open : texte provisoire du serveur (morceau en cours), son dernier mot est peut-être coupé
+function align(st, heard, raw = [], stops = new Set(), open = false) {
   const E = rec.words, N = E.length;
+  // un mot du texte qui vient juste après (8 mots) : lu en avance ou mal placé par le modèle,
+  // pas un mot remplacé (« قَلِيلًا » entendu au début d'une reprise à « وَلَا تَشْتَرُوا », 30/10/2026)
+  const soon = (x, p) => E.slice(p, p + 8).some((e) => e.norm === x);
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
@@ -1095,7 +1099,7 @@ function align(st, heard, raw = [], stops = new Set()) {
     if (w === E[p].norm) {
       // serveur : un autre vrai mot du Coran dit juste avant à sa place (« وَإِيَّايَ فَارْهَبُونِ » puis
       // « وَإِيَّايَ فَاتَّقُونِ ») : se reprendre soi-même n'efface pas l'erreur, comme devant un cheikh
-      const wrong = rec.engine === 'server' ? st.pending.filter((x) => x.length >= 3 && isQuranWord(x) && lev(x, w) >= 2) : [];
+      const wrong = rec.engine === 'server' ? st.pending.filter((x) => x.length >= 3 && isQuranWord(x) && lev(x, w) >= 2 && !soon(x, p)) : [];
       advanceOk(st, p);
       if (wrong.length) { st.marks[p] = 'bad'; st.heard[p] = wrong; } else checkVowels(st, p, raw[i], stops.has(i));
       continue;
@@ -1123,6 +1127,12 @@ function align(st, heard, raw = [], stops = new Set()) {
       if (server && letterSwap(w, E[p].norm)) { st.marks[p] = 'bad'; st.vow[p] = raw[i] || w; }
       continue;
     }
+    // serveur : le « و » / « ف » du premier mot d'un morceau (après une pause) est souvent perdu par le
+    // modèle (« لَا تَلْبِسُوا » pour « وَلَا تَلْبِسُوا ») : ce n'est pas un oubli (2 faux rappels le 30/10/2026)
+    if (server && (i === 0 || stops.has(i - 1)) && w.length >= 2 && (E[p].norm === 'و' + w || E[p].norm === 'ف' + w)) {
+      advanceOk(st, p);
+      continue;
+    }
     // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
     if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (waslAlone(w, p)) { advanceOk(st, p); continue; }
@@ -1130,6 +1140,9 @@ function align(st, heard, raw = [], stops = new Set()) {
     // إدغام / إقلاب : « مِنْ رَبِّهِمْ » entendu « مِرَّبِّهِمْ », ou « مِنْ » entendu « مِ »
     if (nunJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
     if (nunAlone(w, p)) { advanceOk(st, p); continue; }
+    // texte provisoire : son dernier mot est souvent coupé (« بِآيَة » pour « بِآيَاتِي ») ; il sera jugé
+    // quand le morceau sera terminé (un rappel était déclenché sur ce bout de mot, 30/10/2026)
+    if (open && i === heard.length - 1) break;
     // voyelle longue abrégée avant la liaison : « وَمَا » entendu « وَمَ » devant « اللَّهُ »
     if (p + 1 < N && E[p + 1].wasl && E[p].norm.length > 2 && w === E[p].norm.replace(/[اوي]$/, '')) { advanceOk(st, p); continue; }
     // un mot attendu entendu en deux morceaux (pas si le second morceau est à lui seul le mot
@@ -1154,7 +1167,8 @@ function align(st, heard, raw = [], stops = new Set()) {
     // juste après un bip, un mot mal compris (coupé) est ignoré, mais pas un vrai mot du Coran
     // (3 lettres ou plus) : il peut être en trop (« بِاللَّهِ وَالْيَوْمَ الْآخِرَ وَلَوْ » repris après le bip)
     // (ni le mot que l'application vient de prononcer, capté par le micro : rec.echo)
-    if (st.grace > 0) { st.grace--; if (w.length < 3 || !isQuranWord(w) || w === rec.echo) continue; }
+    // (ni un mot qui vient juste après dans le texte : « قَلِيلًا » au début d'une reprise à « وَلَا تَشْتَرُوا »)
+    if (st.grace > 0) { st.grace--; if (w.length < 3 || !isQuranWord(w) || w === rec.echo || soon(w, p)) continue; }
     // mot en trop : un mot hors du texte suivi du bon mot attendu. Traité comme un oubli :
     // le mot attendu passe en rouge (et le rappel fait reprendre à cet endroit)
     const insMin = LEVELS[rec.level].insMin;
@@ -1182,7 +1196,7 @@ function align(st, heard, raw = [], stops = new Set()) {
     }
     // serveur : un autre vrai mot du Coran suivi d'une pause (« وَإِيَّايَ فَارْهَبُونِ » en fin de 2:41)
     // est un mot remplacé : erreur tout de suite, sans attendre d'autres mots inconnus
-    if (server && stops.has(i) && !st.pending.length && w.length >= 3 && isQuranWord(w) && lev(w, E[p].norm) >= 2) {
+    if (server && stops.has(i) && !st.pending.length && w.length >= 3 && isQuranWord(w) && lev(w, E[p].norm) >= 2 && !soon(w, p)) {
       st.marks[p] = 'bad';
       st.heard[p] = [w];
       st.pos = p + 1;
@@ -1753,7 +1767,7 @@ function onResult(e) {
     const raw = text.split(/\s+/).filter((t) => norm(t)); // mots tels qu'entendus (avec voyelles si serveur)
     const heard = raw.map(norm);
     const stops = rec.engine === 'server' ? new Set([...rec.segEnds].map((k) => k - rec.offset)) : new Set();
-    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset), stops);
+    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset), stops, rec.engine === 'server' && !isFinal);
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
   }
