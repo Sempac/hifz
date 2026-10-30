@@ -1836,7 +1836,9 @@ function startRecognizer() {
   r.onerror = (e) => {
     micLog('erreur : ' + e.error);
     if (e.error === 'network' && rec.engine === 'server') {
-      $('#heard').textContent = 'Serveur Hifz injoignable : vérifiez l’adresse dans ⚙ (ou repassez sur « Téléphone »).';
+      $('#heard').textContent = rec.serverState === 'down'
+        ? 'Le serveur Hifz est arrêté : lancez « Démarrer Hifz » sur le PC (2 à 3 minutes), puis réessayez.'
+        : 'Serveur Hifz injoignable : il démarre peut-être encore, réessayez dans une minute (ou repassez sur « Téléphone » dans ⚙).';
       stopListening();
       return;
     }

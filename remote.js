@@ -189,7 +189,18 @@ class ServerRecognizer {
     }
     if (this.ended) return; // arrêté pendant l'ouverture du micro
     let ws;
-    try { ws = await getSocket(this.url); } catch { this.fail('network'); return; }
+    try {
+      ws = await getSocket(rec.serverUrl);
+    } catch {
+      // serveur relancé entre-temps (nouvelle adresse) : on la cherche, puis un second essai
+      const old = rec.serverUrl;
+      await discoverServer(true);
+      if (this.ended) return;
+      try {
+        if (rec.serverUrl === old) throw new Error('même adresse');
+        ws = await getSocket(rec.serverUrl);
+      } catch { this.fail('network'); return; }
+    }
     if (this.ended) return;
     this.sid = ++conn.sid;
     ws.send(JSON.stringify({ type: 'reset', sid: this.sid })); // repartir de zéro
@@ -287,5 +298,55 @@ function serverFromLink() {
   alert('✅ Adresse du serveur Hifz enregistrée.\nReconnaissance : Serveur Hifz.');
 }
 window.addEventListener('hashchange', serverFromLink);
+
+// Adresse annoncée par le serveur lui-même au démarrage, sur le canal ntfy.sh ci-dessous (le QR code
+// n'est plus nécessaire). L'annonce est signée par la clé du notebook : seule une annonce vérifiée
+// par cette clé publique est acceptée (n'importe qui peut écrire sur un canal ntfy).
+const ANNOUNCE = {
+  topic: 'hifz-cc9cc55225c80307',
+  key: { kty: 'EC', crv: 'P-256', x: 'DbwNKFOB1uSI-gTjuwY84E8lb1uFCIiJX4HC20n5sW8', y: 'FR5Idd4rnNzJ7_M7W1fQUThIZ3HZPwuQ44SjdqNur7o', ext: true },
+  maxAge: 12 * 3600, // une annonce plus vieille est ignorée (Kaggle arrête tout au bout de 12 h)
+};
+let discovered = 0; // heure de la dernière recherche (pas plus d'une toutes les 20 s)
+rec.serverState = ''; // 'up' | 'down' | '' (inconnu) : dernière annonce vérifiée
+
+const b64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+
+async function verifyAnnounce(m) {
+  if (!m || !['up', 'down'].includes(m.kind) || typeof m.sig !== 'string' || Math.abs(Date.now() / 1000 - m.t) > ANNOUNCE.maxAge) return false;
+  if (m.kind === 'up' && !/^wss:\/\/[a-z0-9-]+\.trycloudflare\.com\/ws$/.test(m.url)) return false;
+  try {
+    const key = await crypto.subtle.importKey('jwk', ANNOUNCE.key, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, b64url(m.sig), new TextEncoder().encode(`${m.kind}|${m.url}|${m.t}`));
+  } catch { return false; }
+}
+
+async function discoverServer(force) {
+  if (!force && Date.now() - discovered < 20000) return;
+  discovered = Date.now();
+  let lines;
+  try {
+    const r = await fetch(`https://ntfy.sh/${ANNOUNCE.topic}/json?poll=1&since=12h`, { cache: 'no-store' });
+    lines = (await r.text()).split('\n').filter(Boolean).reverse(); // la plus récente d'abord
+  } catch { return; } // hors ligne : on garde l'adresse connue
+  for (const line of lines) {
+    let m;
+    try { m = JSON.parse(JSON.parse(line).message); } catch { continue; }
+    if (!(await verifyAnnounce(m))) continue;
+    rec.serverState = m.kind;
+    if (m.kind === 'up' && m.url !== rec.serverUrl) {
+      rec.serverUrl = m.url;
+      store.set('serverUrl', m.url);
+      micLog('serveur : nouvelle adresse annoncée');
+      applyEngineUi();
+      refreshAvailability();
+    }
+    return;
+  }
+  rec.serverState = '';
+}
+
 applyEngineUi();
 serverFromLink();
+discoverServer(true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) discoverServer(); });
