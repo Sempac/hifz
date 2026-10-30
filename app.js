@@ -1653,7 +1653,8 @@ function finish() {
   const unsure = marks.filter((m) => m === 'unsure').length;
   const pct = Math.round((ok / Math.max(1, rec.words.length - unsure)) * 100);
   // progrès des mots « À revoir » : une seule fois par récitation (finish peut être rappelé)
-  if (rec.reviewOut === null) rec.reviewOut = updateReview();
+  const first = rec.reviewOut === null;
+  if (first) rec.reviewOut = updateReview();
   const flagged = [...rec.flagged].sort((x, y) => x - y).map((i) => rec.words[i]);
 
   // les mots à retravailler, par nature d'erreur : mémoire (oubli, autre mot, mot en trop,
@@ -1694,6 +1695,17 @@ function finish() {
       : '');
   $('#summary').hidden = false;
   $('#fix').hidden = true;
+  // le même bilan en texte, gardé par le serveur avec le diagnostic (plus besoin de capture d'écran)
+  if (first && window.sendReport) {
+    const txt = ({ i, kind, fixed, heard, why, shown }) => `${rec.words[i].text} (${rec.words[i].s}:${rec.words[i].ayah}, mot ${i + 1})`
+      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
+      + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '');
+    sendReport([
+      `Bilan « ${current.title} » : ${pct} % · ${ok}/${rec.words.length} mots justes du premier coup · niveau ${rec.level}`,
+      ...memory.map((x) => '🧠 ' + txt(x)), ...pron.map((x) => '🗣 ' + txt(x)), ...misheard.map((x) => '🎙 ' + txt(x)),
+      ...flagged.map((w) => `🚩 ${w.text} (${w.s}:${w.ayah})`), '', 'Journal du micro :', ...micLines,
+    ].join('\n'));
+  }
   $('#summary').querySelectorAll('.say-w').forEach((b) => b.addEventListener('click', () => playWord(+b.dataset.i)));
   const redo = (title, list) => {
     current = { title, ayahs: reviewAyahs(list.map(({ i }) => ({ s: rec.words[i].s, a: rec.words[i].ayah, k: rec.words[i].k }))) };

@@ -240,6 +240,15 @@ class ServerRecognizer {
   stop() { this.abort(); }
 }
 
+// Bilan de fin de récitation, gardé par le serveur avec le diagnostic (connexion à part : celle de
+// la récitation est déjà fermée). Sans serveur, le bilan reste seulement sur le téléphone.
+function sendReport(text) {
+  if (rec.engine !== 'server' || !rec.serverUrl) return;
+  let ws;
+  try { ws = new WebSocket(rec.serverUrl); } catch { return; }
+  ws.onopen = () => { ws.send(JSON.stringify({ type: 'report', text })); setTimeout(() => ws.close(), 1000); };
+}
+
 // ---------- Réglage : moteur de reconnaissance et adresse du serveur ----------
 
 function applyEngineUi() {
