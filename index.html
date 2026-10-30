@@ -199,13 +199,12 @@
         <p class="sel-help recite-only">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : vraie faute, le mot va dans « À revoir ». Ces deux boutons se déplacent au doigt.</p>
         <label class="set-row">Niveau de correction
           <select id="severity" aria-label="Niveau de correction">
-            <option value="1">Très stricte</option>
-            <option value="2">Stricte</option>
-            <option value="3">Normale</option>
-            <option value="4">Souple</option>
-            <option value="5">Très souple</option>
+            <option value="1">Stricte</option>
+            <option value="2">Normale</option>
+            <option value="3">Souple</option>
           </select>
         </label>
+        <p class="sel-help">Stricte : chaque mot doit être bien entendu, un « و » non entendu ou une lettre proche (ح/ه, ص/س…) fait reprendre le mot. Normale : un mot que le micro n'a pas capté est marqué « non entendu » au lieu d'une faute. Souple : le micro a droit à plus d'erreurs, et le « و » perdu en début de phrase ou une lettre proche sont acceptés.</p>
         <label class="set-row">🎙 Reconnaissance
           <select id="engine" aria-label="Reconnaissance">
             <option value="device">Téléphone (Google / Apple)</option>
@@ -249,7 +248,7 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help recite-only" id="recite-title"></p>
-        <p class="sel-help">Version 30</p>
+        <p class="sel-help">Version 31</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>

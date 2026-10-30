@@ -36,18 +36,18 @@ function lev(a, b) {
   return prev[n];
 }
 
-// Niveaux de correction (1 = très stricte … 5 = très souple) :
+// Niveaux de correction (1 = stricte, 2 = normale, 3 = souple) :
 //   tol      part maximale de lettres différentes pour accepter un mot
 //   extra    nombre de mots inconnus d'affilée avant de compter le mot attendu comme erreur
 //   unsure   nombre de mots sautés d'affilée affichés « non entendu » au lieu d'erreur
 //   shortOk  un petit mot (1-2 lettres) sauté seul est accepté
 //   insMin   longueur minimale d'un mot en trop pour le signaler (0 = pas de détection)
+//   lenient  serveur : « و » / « ف » perdu en début de morceau accepté, et lettre proche (ح/ه, ص/س…)
+//            acceptée ; sinon les deux font reprendre le mot (le modèle se trompe parfois)
 const LEVELS = {
-  1: { tol: 0.25, extra: 2, unsure: 0, shortOk: false, insMin: 2 },
-  2: { tol: 0.34, extra: 2, unsure: 0, shortOk: false, insMin: 2 },
-  3: { tol: 0.42, extra: 3, unsure: 1, shortOk: false, insMin: 3 },
-  4: { tol: 0.5, extra: 3, unsure: 1, shortOk: true, insMin: 3 },
-  5: { tol: 0.58, extra: 4, unsure: 2, shortOk: true, insMin: 0 },
+  1: { tol: 0.34, extra: 2, unsure: 0, shortOk: false, insMin: 2, lenient: false },
+  2: { tol: 0.42, extra: 3, unsure: 1, shortOk: false, insMin: 3, lenient: false },
+  3: { tol: 0.5, extra: 3, unsure: 1, shortOk: true, insMin: 3, lenient: true },
 };
 
 // Deux mots sont considérés identiques s'ils diffèrent d'au plus une part des lettres
@@ -563,7 +563,8 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const rec = {
   words: [],        // { text, norm } pour chaque mot attendu
   spans: [],
-  level: store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4),
+  // (anciens réglages sur 5 niveaux : 1-2 → stricte, 3 → normale, 4-5 → souple)
+  level: store.get('level3', [1, 1, 1, 2, 3, 3][store.get('level', store.get('severity', 'soft') === 'strict' ? 2 : 4)]),
   overrides: new Set(), // mots marqués justes à la main par l'utilisateur
   forcedBad: new Set(), // mots marqués faux à la main (appui long)
   counted: new Set(),   // mots déjà pris en compte par l'apprentissage automatique
@@ -1124,12 +1125,13 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     const cutWord = E[p].norm.startsWith(w) || w.startsWith(E[p].norm);
     if (!(server && !cutWord && isQuranWord(w) && lev(w, E[p].norm) >= 2) && same(w, E[p].norm)) {
       advanceOk(st, p);
-      if (server && letterSwap(w, E[p].norm)) { st.marks[p] = 'bad'; st.vow[p] = raw[i] || w; }
+      if (server && !LEVELS[rec.level].lenient && letterSwap(w, E[p].norm)) { st.marks[p] = 'bad'; st.vow[p] = raw[i] || w; }
       continue;
     }
     // serveur : le « و » / « ف » du premier mot d'un morceau (après une pause) est souvent perdu par le
-    // modèle (« لَا تَلْبِسُوا » pour « وَلَا تَلْبِسُوا ») : ce n'est pas un oubli (2 faux rappels le 30/10/2026)
-    if (server && (i === 0 || stops.has(i - 1)) && w.length >= 2 && (E[p].norm === 'و' + w || E[p].norm === 'ف' + w)) {
+    // modèle (« لَا تَلْبِسُوا » pour « وَلَا تَلْبِسُوا ») : accepté en niveau souple seulement (2 faux rappels
+    // le 30/10/2026) ; en niveau strict, le mot est à reprendre
+    if (server && LEVELS[rec.level].lenient && (i === 0 || stops.has(i - 1)) && w.length >= 2 && (E[p].norm === 'و' + w || E[p].norm === 'ف' + w)) {
       advanceOk(st, p);
       continue;
     }
@@ -1796,7 +1798,7 @@ const LATE_MS = 2500;   // attente depuis la réponse précédente
 const recognitionAvailable = () => (rec.engine === 'server' ? !!rec.serverUrl : !!SR);
 
 // Le serveur Hifz renvoie le texte avec les voyelles : on les vérifie (sauf en Très souple)
-const vowelCheck = () => rec.engine === 'server' && rec.level <= 4;
+const vowelCheck = () => rec.engine === 'server';
 
 function startListening() {
   if (!recognitionAvailable() || rec.listening) return;
@@ -1971,7 +1973,7 @@ $('#opt-replay').addEventListener('change', () => {
 $('#severity').value = rec.level;
 $('#severity').addEventListener('change', () => {
   rec.level = Number($('#severity').value);
-  store.set('level', rec.level);
+  store.set('level3', rec.level);
 });
 
 // ---------- Installation comme application ----------
