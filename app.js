@@ -790,13 +790,19 @@ $('#btn-recite-view').addEventListener('click', () => {
 });
 
 // ---------- Panneaux de réglages (⚙ en haut à droite du cadre) ----------
-$('#btn-settings').addEventListener('click', () => {
+// le panneau est sorti de l'écran de récitation pour s'ouvrir aussi depuis l'accueil (⚙ à côté
+// du Labo) ; ouvert de l'accueil, les boutons propres à une récitation sont cachés
+document.body.append($('#settings'));
+function openSettings(fromHome) {
   $('#mic-log').textContent = [
     `Appareil : ${IOS ? 'iPhone / iPad' : 'autre'} · écoute ${rec.phrase ? 'par phrase' : 'continue'} · niveau ${rec.level}`,
     navigator.userAgent, '', ...micLines,
   ].join('\n') || '(vide)';
+  $('#settings').classList.toggle('from-home', fromHome);
   $('#settings').hidden = false;
-});
+}
+$('#btn-settings').addEventListener('click', () => openSettings(false));
+$('#home-gear').addEventListener('click', () => openSettings(true));
 $('#learn-gear').addEventListener('click', () => { $('#learn-settings').hidden = false; });
 document.querySelectorAll('.sheet').forEach((sh) => {
   sh.addEventListener('click', (e) => { if (e.target === sh || e.target.closest('.sheet-close')) sh.hidden = true; });

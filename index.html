@@ -23,6 +23,7 @@
     <header class="bar">
       <h1>Hifz</h1>
       <button id="btn-labo" class="bar-btn">🧪 Labo</button>
+      <button id="home-gear" class="bar-btn" aria-label="Réglages">⚙</button>
     </header>
     <!-- affiché seulement quand l'application est ouverte dans le navigateur (pas installée) -->
     <div id="install-banner" class="notice install" hidden>
@@ -191,11 +192,11 @@
     <div id="settings" class="sheet" hidden>
       <div class="sheet-body">
         <h2>Réglages</h2>
-        <div class="actions">
+        <div class="actions recite-only">
           <button id="btn-restart" class="btn">↺ Recommencer</button>
           <button id="btn-hint" class="btn">💡 Indice (mot suivant)</button>
         </div>
-        <p class="sel-help">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : vraie faute, le mot va dans « À revoir ». Ces deux boutons se déplacent au doigt.</p>
+        <p class="sel-help recite-only">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : vraie faute, le mot va dans « À revoir ». Ces deux boutons se déplacent au doigt.</p>
         <label class="set-row">Niveau de correction
           <select id="severity" aria-label="Niveau de correction">
             <option value="1">Très stricte</option>
@@ -242,13 +243,13 @@
         </label>
         <label class="opt"><input type="checkbox" id="opt-phrase"> 📱 Écoute par phrase (à essayer sur iPhone si l'application tarde à suivre)</label>
         <label class="opt"><input type="checkbox" id="opt-delay"> ⏱ Afficher l'attente entre deux réponses du micro</label>
-        <button id="btn-recite-view" class="btn">≡ Affichage texte</button>
+        <button id="btn-recite-view" class="btn recite-only">≡ Affichage texte</button>
         <details class="mic-log">
           <summary>🛠 Journal du micro (diagnostic)</summary>
           <pre id="mic-log"></pre>
         </details>
-        <p class="sel-help" id="recite-title"></p>
-        <p class="sel-help">Version 27</p>
+        <p class="sel-help recite-only" id="recite-title"></p>
+        <p class="sel-help">Version 28</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>

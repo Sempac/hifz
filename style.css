@@ -398,6 +398,7 @@ body {
   border: 1px solid var(--line); background: var(--bg); color: var(--text);
 }
 .sheet .opt { margin: 0 0 12px; }
+.sheet.from-home .recite-only { display: none; }
 .sheet .sheet-body > .btn { width: 100%; margin-top: 6px; }
 .sheet-body { max-height: 85dvh; overflow-y: auto; }
 .server-row { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
