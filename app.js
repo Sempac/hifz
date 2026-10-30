@@ -1038,8 +1038,41 @@ const vowelName = (v) => bidi(VOWEL_NAME[v] || v);
 function vowelExplain(expected, heardRaw) {
   const sw = letterSwap(norm(heardRaw), norm(expected));
   if (sw) return `lettre « ${bidi(sw[0])} » au lieu de « ${bidi(sw[1])} »`;
+  const miss = fixSpots(expected, heardRaw).filter((s) => s.letter).map((s) => [...laboSlots(expected)[s.k].raw][0]);
+  if (miss.length && norm(heardRaw).length < norm(expected).length) return `lettre « ${bidi(miss.join(' '))} » non entendue`;
+  if (miss.length === 1) { // autre lettre (« وَعَقِيمُوا » pour « وَأَقِيمُوا »)
+    const b = laboSlots(heardRaw), used = new Set(alignSlots(laboSlots(expected), b));
+    const got = b.find((s, j) => norm(s.raw) && !used.has(j));
+    if (got) return `lettre « ${bidi([...got.raw][0])} » au lieu de « ${bidi(miss[0])} »`;
+  }
   const d = vowelDiff(expected, heardRaw, true) || vowelDiff(expected, heardRaw, false);
   return d ? `lettre « ${bidi(d.letter)} » : ${vowelName(d.got)} au lieu de ${vowelName(d.exp)}` : '';
+}
+
+// Endroits fautifs du mot attendu, pour les montrer en rouge : lettres non entendues ou remplacées
+// ({ k, letter: true }, k = indice de la lettre dans laboSlots), sinon la voyelle fausse ({ k })
+function fixSpots(expected, heardRaw) {
+  const a = laboSlots(expected), b = laboSlots(heardRaw);
+  const pair = alignSlots(a, b);
+  const letters = a.map((s, k) => k).filter((k) => norm(a[k].raw) && pair[k] === undefined);
+  if (letters.length) return letters.length <= 2 ? letters.map((k) => ({ k, letter: true })) : [];
+  const d = vowelDiff(expected, heardRaw, true) || vowelDiff(expected, heardRaw, false);
+  return d ? [{ k: d.k }] : [];
+}
+
+// Le mot attendu, avec la lettre fautive en rouge (voyelle fausse : la lettre qui la porte, avec sa
+// voyelle ; Chrome ne sait pas colorer un signe de voyelle seul, il reste de la couleur du mot)
+function markedWord(expected, heardRaw) {
+  const el = document.createElement('span');
+  el.className = 'ar ok'; el.dir = 'rtl'; el.lang = 'ar';
+  const spots = new Set(fixSpots(expected, heardRaw).map((s) => s.k));
+  laboSlots(expected).forEach((s, k) => {
+    if (!spots.has(k)) { el.append(s.raw); return; }
+    const red = document.createElement('span');
+    red.className = 'spot'; red.textContent = s.raw;
+    el.append(red);
+  });
+  return el;
 }
 
 // Lettres proches que l'on confond en récitant : une seule lettre changée de la paire, le reste
@@ -1072,7 +1105,7 @@ function vowelDiff(expected, heardRaw, stop = false) {
       // alors sur le « n »). Une autre voyelle (ٌ pour ٍ) reste une faute.
       if (hv.replace('n', '') === a[k].v.replace('n', '')) continue;
     }
-    if (hv !== a[k].v) return { letter: [...a[k].raw][0], exp: a[k].v, got: hv };
+    if (hv !== a[k].v) return { letter: [...a[k].raw][0], exp: a[k].v, got: hv, k };
   }
   return null;
 }
@@ -1572,6 +1605,10 @@ function replayAt(i) {
   rec.recognition = null;
   if (r) { try { r.abort(); } catch { /* déjà arrêté */ } }
 
+  // mot entendu presque juste (« لَا » pour « وَلَا ») : la lettre manquante ou remplacée est montrée
+  const e = rec.words[i].norm;
+  const close = !rec.shown.vow[i] && !rec.shown.ins[i] && (rec.shown.heard[i] || [])
+    .find((x) => x !== e && lev(x, e) <= 2 && lev(x, e) / Math.max(x.length, e.length) <= 0.5);
   const st = clone(rec.shown);
   st.pos = i;
   st.marks.length = i;
@@ -1579,7 +1616,7 @@ function replayAt(i) {
   st.pending = [];
   for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
   const extraWord = st.ins[i]; // rappel dû à un mot en trop ?
-  const vowelWord = st.vow[i]; // … ou à une voyelle fausse ?
+  const vowelWord = st.vow[i] || close; // … ou à une voyelle / lettre fausse ?
   for (const k of Object.keys(st.ins)) if (Number(k) >= i) delete st.ins[k];
   for (const k of Object.keys(st.vow)) if (Number(k) >= i) delete st.vow[k];
   rec.shown = rec.committed = st;
@@ -1603,7 +1640,7 @@ function replayAt(i) {
   const word = rec.words[i].text;
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
   // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
-  const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [word, 'ok'], [vowelExplain(word, vowelWord), '', true]] : null;
+  const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [markedWord(word, vowelWord)], [vowelExplain(word, vowelWord), '', true]] : null;
   if (rec.retries[i] <= rec.beeps) {
     micLog('bip au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Prononciation. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
@@ -1627,6 +1664,7 @@ function showFix(parts) {
   box.textContent = '';
   for (const [text, ar, line] of parts) {
     if (!text) continue;
+    if (text instanceof Node) { box.append(text, ' '); continue; } // mot déjà construit (markedWord)
     const el = document.createElement(line ? 'div' : 'span');
     el.textContent = text;
     if (ar) { el.className = 'ar ' + ar; el.dir = 'rtl'; el.lang = 'ar'; }

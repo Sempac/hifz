@@ -380,6 +380,8 @@ body {
 #view-recite .fix .ar { font-family: "Amiri Quran", serif; font-size: 1.5rem; font-weight: 600; }
 #view-recite .fix .ar.bad { color: var(--bad); }
 #view-recite .fix .ar.ok { color: var(--ok); }
+/* lettre ou voyelle fautive dans le mot attendu */
+#view-recite .fix .ar .spot { color: var(--bad); }
 #view-recite .fix div { font-size: 1rem; margin-top: 4px; }
 /* jauge du micro : fine barre au-dessus du bas du cadre (orange : trop bas, rouge : saturé) */
 #view-recite .vu {
