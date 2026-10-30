@@ -136,7 +136,7 @@ function coachCheck(now) {
 // Une seule connexion au serveur, ouverte toute la récitation : après un rappel, on ne se
 // reconnecte pas (trop lent à travers internet), on demande au serveur de repartir de zéro.
 // Chaque reprise a un numéro de session ; les réponses des sessions précédentes sont ignorées.
-const conn = { ws: null, url: '', opening: null, sid: 0, listener: null };
+const conn = { ws: null, url: '', opening: null, sid: 0, listener: null, expectWs: null, expectKey: '' };
 
 function getSocket(url) {
   if (conn.ws && conn.ws.readyState === 1 && conn.url === url) return Promise.resolve(conn.ws);
@@ -203,6 +203,13 @@ class ServerRecognizer {
     }
     if (this.ended) return;
     this.sid = ++conn.sid;
+    // texte attendu + niveau, pour le « second avis » du serveur (lettre ou voyelle douteuse : il
+    // mesure si le mot attendu était presque aussi probable) ; envoyé quand il change
+    const E = rec.words, key = `${rec.level}|${E.length}|${E[0] && E[0].text}|${E.length && E[E.length - 1].text}`;
+    if (conn.expectWs !== ws || conn.expectKey !== key) {
+      ws.send(JSON.stringify({ type: 'expect', words: E.slice(0, 3000).map((w) => w.text), level: rec.level }));
+      conn.expectWs = ws; conn.expectKey = key;
+    }
     ws.send(JSON.stringify({ type: 'reset', sid: this.sid })); // repartir de zéro
     conn.listener = this;
     mic.sink = (buf) => { if (ws.readyState === 1) ws.send(buf.buffer); };
