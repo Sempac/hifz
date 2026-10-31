@@ -222,7 +222,7 @@ class ServerRecognizer {
     const finals = (msg.segments || []).filter((s) => s.final);
     finals.slice(this.finals || 0).forEach((s) => coachWords(s.text));
     this.finals = Math.max(this.finals || 0, finals.length);
-    const results = (msg.segments || []).map((s) => Object.assign([{ transcript: s.text, confidence: 1 }], { isFinal: s.final }));
+    const results = (msg.segments || []).map((s) => Object.assign([{ transcript: s.text, confidence: 1 }], { isFinal: s.final, cut: !!s.cut }));
     if (results.length && this.onresult) this.onresult({ results, resultIndex: 0 });
   }
 

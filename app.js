@@ -1122,6 +1122,8 @@ function checkVowels(st, j, heardRaw, pause = false) {
   if (vowelError(E[j].text, heardRaw, endOfAyah || pause)) { st.marks[j] = 'bad'; st.vow[j] = heardRaw; }
 }
 
+const BASMALA = ['بسم', 'الله', 'الرحمن', 'الرحيم'];
+
 // Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
 // stops : indices des mots entendus suivis d'une pause (voyelle finale non exigée).
 // open : texte provisoire du serveur (morceau en cours), son dernier mot est peut-être coupé
@@ -1136,6 +1138,9 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // lettre isolée (bruit, fin du son d'un rappel) : ignorée, sauf si c'est le mot attendu (ق، ص، ن)
     // (ou « مِنْ » assimilé : « م » devant « رَبِّهِمْ »)
     if (w.length <= 1 && E[p].norm.length > 1 && !nunAlone(w, p)) continue;
+    // basmala récitée avant une sourate (absente du texte, sauf dans Al-Fatiha) : ignorée, ce ne sont
+    // pas des mots en trop (« قُلْ » de 112:1 compté faux après la basmala, 31/10/2026)
+    if (E[p].ayah === 1 && E[p].k === 0 && w !== E[p].norm && BASMALA.some((b) => same(w, b))) continue;
     if (w === E[p].norm) {
       // serveur : un autre vrai mot du Coran dit juste avant à sa place (« وَإِيَّايَ فَارْهَبُونِ » puis
       // « وَإِيَّايَ فَاتَّقُونِ ») : se reprendre soi-même n'efface pas l'erreur, comme devant un cheikh
@@ -1640,8 +1645,11 @@ function replayAt(i) {
   };
   // serveur : micro rouvert un peu après la fin du son (sinon il capte la fin du son du
   // haut-parleur, que le serveur transforme en lettres isolées comptées comme des fautes)
-  // (1 s : avec 0,4 s, le micro captait encore le mot joué, « عَلَيْكُمْ » au début d'une reprise, 29/10/2026)
-  const after = () => setTimeout(resume, rec.engine === 'server' ? 1000 : 0);
+  // (mot joué : 0,6 s, le mot encore capté est ignoré grâce à rec.echo ; avec 0,4 s sans rec.echo,
+  // « عَلَيْكُمْ » était capté au début d'une reprise, 29/10/2026). Bip : 0,2 s seulement, sa fin ne
+  // donne que du bruit (ignoré) ; avec 1 s, le début de la reprise, dite juste après le bip, était
+  // perdu (« مِنْ شَ » manquant devant « رِّ الْوَسْوَاسِ », l'application se perdait, 31/10/2026)
+  const after = (ms) => () => setTimeout(resume, rec.engine === 'server' ? ms : 0);
   rec.echo = null;
   const word = rec.words[i].text;
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
@@ -1651,14 +1659,14 @@ function replayAt(i) {
     micLog('bip au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Prononciation. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
     showFix(extraWord ? [['🔔 Mot en trop :'], [extraWord, 'bad'], ['Reprenez sans lui.']] : vowelFix || [['🔔 Erreur : reprenez à l\'endroit indiqué.']]);
-    playBeep(after);
+    playBeep(after(200));
   } else {
     micLog('prononciation du mot ' + (i + 1));
     rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
     $('#heard').textContent = '🔊 Écoutez le mot';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['Le mot attendu :'], [word, 'ok']]
       : vowelFix || [['🔊 Le mot :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
-    sayWords([i], after);
+    sayWords([i], after(600));
   }
 }
 
@@ -1781,16 +1789,17 @@ function finish() {
 function sessionText(results, a) {
   // serveur Hifz : les morceaux sont toujours distincts, on les met bout à bout
   if (rec.engine === 'server') {
-    const texts = results.map((r) => r[0].transcript.trim()).filter(Boolean);
+    const segs = results.filter((r) => r[0].transcript.trim());
     // dernier mot de chaque morceau : le serveur coupe aux pauses, donc à un arrêt (rec.segEnds :
-    // indices des mots, la voyelle finale n'y est pas exigée)
+    // indices des mots, la voyelle finale n'y est pas exigée) ; sauf morceau coupé de force (cut :
+    // trop long, sans pause : « فِي جِيدِهَا حَبْلٍ » au lieu de « حَبْلٌ » passait, 31/10/2026)
     rec.segEnds = new Set();
     let n = 0;
-    for (const t of texts) {
-      n += t.split(/\s+/).filter((w) => norm(w)).length;
-      rec.segEnds.add(n - 1);
+    for (const r of segs) {
+      n += r[0].transcript.split(/\s+/).filter((w) => norm(w)).length;
+      if (!r.cut) rec.segEnds.add(n - 1);
     }
-    return texts.join(' ');
+    return segs.map((r) => r[0].transcript.trim()).join(' ');
   }
   const segs = [];
   for (const r of results) {
