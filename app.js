@@ -192,7 +192,7 @@ function surahHead(s) {
 }
 
 // ---------- Navigation ----------
-const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo') };
+const views = { home: $('#view-home'), learn: $('#view-learn'), recite: $('#view-recite'), labo: $('#view-labo'), drill: $('#view-drill') };
 
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
@@ -1116,8 +1116,8 @@ function letterReport(marks) {
     const withL = rec.words.filter((w) => w.norm.includes(exp)).length;
     const okL = rec.words.filter((w, i) => w.norm.includes(exp) && marks[i] === 'ok').length;
     const s = (stats[exp] ||= { faults: 0, ok: 0, sessions: [] });
-    if (rec.letterCounted !== rec.firstErr) { s.faults += f.n; s.ok += okL; s.sessions = [...s.sessions, today].slice(-20); }
     const got = Object.entries(f.got).sort((x, y) => y[1] - x[1])[0][0];
+    if (rec.letterCounted !== rec.firstErr) { s.faults += f.n; s.ok += okL; s.sessions = [...s.sessions, today].slice(-20); s.mainGot = got; }
     return { exp, got, n: f.n, withL, okL, words: f.words, tip: LETTER_TIPS[exp] || '' };
   });
   rec.letterCounted = rec.firstErr; // une seule fois par récitation (finish peut être rappelé)
@@ -1811,6 +1811,7 @@ function finish() {
       + letters.map((l) => `<div class="rl"><span class="rw" dir="rtl">${l.exp}</span> dite comme <span class="rw" dir="rtl">${l.got}</span>`
         + ` dans ${l.n} mot(s) sur ${l.withL}<br><small>${l.tip}</small><br>`
         + l.words.map((i) => `<button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button><span class="rw" dir="rtl">${rec.words[i].text}</span>`).join(' ')
+        + `<br><button class="btn drill-go" data-l="${l.exp}" data-alt="${l.got}">🎯 M'entraîner sur ${l.exp} (comparé au récitateur)</button>`
         + '</div>').join('')
       + '<button id="btn-redo-letters" class="btn primary">🎤 Réciter à nouveau ces versets</button></div>'
     : '';
@@ -1858,6 +1859,14 @@ function finish() {
   $('#btn-redo-memory')?.addEventListener('click', () => redo('Mémoire', memory));
   $('#btn-redo-pron')?.addEventListener('click', () => redo('Prononciation', pron));
   $('#btn-redo-letters')?.addEventListener('click', () => redo('Lettres', letterWords));
+  // entraînement : d'abord les mots où la lettre a été manquée, puis d'autres mots du passage qui la contiennent
+  $('#summary').querySelectorAll('.drill-go').forEach((b) => b.addEventListener('click', () => {
+    const l = letters.find((x) => x.exp === b.dataset.l);
+    const others = rec.words.map((w, i) => i).filter((i) => rec.words[i].norm.includes(l.exp) && !l.words.includes(i));
+    const seen = new Set();
+    const words = [...l.words, ...others].map((i) => rec.words[i]).filter((w) => !seen.has(w.norm) && seen.add(w.norm));
+    openDrill(l.exp, b.dataset.alt, words);
+  }));
   $('#btn-review-these')?.addEventListener('click', () => redo('À revoir', flagged.map((w) => ({ i: rec.words.indexOf(w) }))));
 }
 

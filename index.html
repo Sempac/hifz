@@ -22,6 +22,7 @@
   <section id="view-home" class="view">
     <header class="bar">
       <h1>Hifz</h1>
+      <button id="btn-letters" class="bar-btn">🔤 Lettres</button>
       <button id="btn-labo" class="bar-btn">🧪 Labo</button>
       <button id="home-gear" class="bar-btn" aria-label="Réglages">⚙</button>
     </header>
@@ -248,9 +249,29 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help recite-only" id="recite-title"></p>
-        <p class="sel-help">Version 36</p>
+        <p class="sel-help">Version 37</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
+    </div>
+  </section>
+
+  <!-- Écran : entraînement d'une lettre, comparé au récitateur (serveur Hifz) -->
+  <section id="view-drill" class="view" hidden>
+    <header class="bar">
+      <button class="back" aria-label="Retour">←</button>
+      <h1 id="drill-title">🔤 Lettres</h1>
+    </header>
+    <div id="drill-pick" class="drill-pick"></div>
+    <div id="drill-main" hidden>
+      <p id="drill-tip" class="notice"></p>
+      <div id="drill-word" class="drill-word" dir="rtl" lang="ar"></div>
+      <div class="drill-actions">
+        <button id="drill-listen" class="btn">🔊 Récitateur</button>
+        <button id="drill-rec" class="btn primary">🎤 À vous</button>
+        <button id="drill-next" class="btn">Suivant ➜</button>
+      </div>
+      <div id="drill-result" class="drill-result"></div>
+      <p id="drill-progress" class="tip"></p>
     </div>
   </section>
 
@@ -295,5 +316,6 @@
   <script src="mushaf.js"></script>
   <script src="remote.js"></script>
   <script src="labo.js"></script>
+  <script src="drill.js"></script>
 </body>
 </html>
