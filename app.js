@@ -591,6 +591,7 @@ const rec = {
   noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
   retries: {},          // mot → nombre de reprises
   firstErr: {},         // mot → nature de l'erreur à la première reprise (bilan)
+  letterFaults: {},     // mot → { exp, got } : lettre attendue dite comme une autre (bilan, lettres à travailler)
   pausing: false,       // micro coupé le temps de faire entendre un mot
   committed: null,  // état validé (résultats finaux)
   shown: null,      // état affiché (peut inclure un résultat provisoire)
@@ -953,6 +954,7 @@ function resetRecite() {
   rec.reviewOut = null;
   rec.retries = {};
   rec.firstErr = {};
+  rec.letterFaults = {};
   rec.lastReplayAt = -1;
   rec.noReplay.clear();
   $('#summary').hidden = true;
@@ -1064,6 +1066,63 @@ function fixSpots(expected, heardRaw) {
   if (letters.length) return letters.length <= 2 ? letters.map((k) => ({ k, letter: true })) : [];
   const d = vowelDiff(expected, heardRaw, true) || vowelDiff(expected, heardRaw, false);
   return d ? [{ k: d.k }] : [];
+}
+
+// Une seule lettre du mot attendu dite comme une autre (« بِالسَّبْرِ » pour « بِالصَّبْرِ ») :
+// { exp: 'ص', got: 'س' } (null sinon, ou si les deux lettres ne diffèrent que par l'écriture de la hamza)
+function letterFault(expected, heardRaw) {
+  const a = laboSlots(expected), b = laboSlots(heardRaw);
+  const pair = alignSlots(a, b), used = new Set(pair);
+  const ea = a.filter((s, k) => norm(s.raw) && pair[k] === undefined);
+  const hb = b.filter((s, j) => norm(s.raw) && !used.has(j));
+  if (ea.length !== 1 || hb.length !== 1) return null;
+  const exp = norm(ea[0].raw), got = norm(hb[0].raw);
+  return exp && got && exp !== got ? { exp, got } : null;
+}
+
+// Comment prononcer la lettre attendue (articulation, makhraj et sifat), pour les lettres que l'on
+// confond le plus souvent
+const LETTER_TIPS = {
+  'ص': 'lettre emphatique (tafkhim) : comme س, mais le fond de la langue levé vers le palais, le son plus plein et plus grave',
+  'ض': 'lettre emphatique : le bord de la langue contre les molaires du haut, le son plein (pas un د)',
+  'ط': 'lettre emphatique (tafkhim) et qalqala : comme ت, mais le fond de la langue levé, le son plus plein',
+  'ظ': 'lettre emphatique : le bout de la langue entre les dents, comme ذ, avec le fond de la langue levé',
+  'ذ': 'le bout de la langue entre les dents, sans emphase (pas un ز)',
+  'ث': 'le bout de la langue entre les dents, souffle léger (pas un س)',
+  'ق': 'du fond de la langue contre la luette, plus profond que ك, avec qalqala',
+  'ح': 'du milieu de la gorge, souffle serré (pas un ه)',
+  'ه': 'du fond de la gorge, souffle léger (pas un ح)',
+  'ع': 'du milieu de la gorge, voisé (pas un ا ni un ء)',
+  'ل': 'le bout de la langue contre le palais derrière les dents, bien net (pas un ن)',
+  'ر': 'le bout de la langue contre le palais, une seule frappe (pas un ل)',
+  'س': 'sifflante légère, sans emphase (pas un ص)',
+  'ز': 'sifflante sonore, la langue derrière les dents (pas un ذ ni un ظ)',
+};
+
+// Bilan des lettres fautives : pour chaque lettre attendue, nombre de mots où elle a été dite comme
+// une autre, sur les mots récités qui la contiennent ; gardé d'une récitation à l'autre (localStorage
+// « letters ») pour suivre les progrès
+function letterReport(marks) {
+  const faults = {};
+  for (const [i, f] of Object.entries(rec.letterFaults)) {
+    (faults[f.exp] ||= { n: 0, got: {}, words: [] }).n++;
+    faults[f.exp].got[f.got] = (faults[f.exp].got[f.got] || 0) + 1;
+    faults[f.exp].words.push(+i);
+  }
+  const stats = store.get('letters', {});
+  const today = new Date().toISOString().slice(0, 10);
+  const out = Object.entries(faults).map(([exp, f]) => {
+    // mots récités contenant la lettre, et ceux où elle a été bien dite (mot juste du premier coup)
+    const withL = rec.words.filter((w) => w.norm.includes(exp)).length;
+    const okL = rec.words.filter((w, i) => w.norm.includes(exp) && marks[i] === 'ok').length;
+    const s = (stats[exp] ||= { faults: 0, ok: 0, sessions: [] });
+    if (rec.letterCounted !== rec.firstErr) { s.faults += f.n; s.ok += okL; s.sessions = [...s.sessions, today].slice(-20); }
+    const got = Object.entries(f.got).sort((x, y) => y[1] - x[1])[0][0];
+    return { exp, got, n: f.n, withL, okL, words: f.words, tip: LETTER_TIPS[exp] || '' };
+  });
+  rec.letterCounted = rec.firstErr; // une seule fois par récitation (finish peut être rappelé)
+  store.set('letters', stats);
+  return out.sort((x, y) => y.n - x.n);
 }
 
 // Le mot attendu, avec la lettre fautive en rouge (voyelle fausse : la lettre qui la porte, avec sa
@@ -1628,6 +1687,7 @@ function replayAt(i) {
   for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
   const extraWord = st.ins[i]; // rappel dû à un mot en trop ?
   const vowelWord = st.vow[i] || close; // … ou à une voyelle / lettre fausse ?
+  if (vowelWord && !rec.letterFaults[i]) { const f = letterFault(rec.words[i].text, vowelWord); if (f) rec.letterFaults[i] = f; }
   for (const k of Object.keys(st.ins)) if (Number(k) >= i) delete st.ins[k];
   for (const k of Object.keys(st.vow)) if (Number(k) >= i) delete st.vow[k];
   rec.shown = rec.committed = st;
@@ -1740,6 +1800,20 @@ function finish() {
     const why = !fixed && rec.shown.vow[i] ? vowelExplain(rec.words[i].text, rec.shown.vow[i]) : '';
     (kind === 'pron' ? pron : memory).push({ i, kind, fixed, heard, why, shown });
   });
+  // lettres dites comme une autre (aussi pour les mots sans rappel)
+  for (const p of pron) {
+    if (!rec.letterFaults[p.i] && rec.shown.vow[p.i]) { const f = letterFault(rec.words[p.i].text, rec.shown.vow[p.i]); if (f) rec.letterFaults[p.i] = f; }
+  }
+  const letters = letterReport(marks);
+  const letterWords = letters.flatMap((l) => l.words.map((i) => ({ i })));
+  const lettersHtml = letters.length
+    ? `<div class="rv"><b>🔤 Lettres à travailler</b><br><small>Prononcées autrement que par les récitateurs : écoutez (🔊) le mot, puis répétez-le en soignant la lettre.</small>`
+      + letters.map((l) => `<div class="rl"><span class="rw" dir="rtl">${l.exp}</span> dite comme <span class="rw" dir="rtl">${l.got}</span>`
+        + ` dans ${l.n} mot(s) sur ${l.withL}<br><small>${l.tip}</small><br>`
+        + l.words.map((i) => `<button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button><span class="rw" dir="rtl">${rec.words[i].text}</span>`).join(' ')
+        + '</div>').join('')
+      + '<button id="btn-redo-letters" class="btn primary">🎤 Réciter à nouveau ces versets</button></div>'
+    : '';
   const line = ({ i, kind, fixed, heard, why, shown }) => {
     const w = rec.words[i];
     return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
@@ -1756,6 +1830,7 @@ function finish() {
     + (rec.reviewOut ? `<br>🎉 ${rec.reviewOut} mot(s) sorti(s) de « À revoir »` : '')
     + group('🧠 Mémoire', memory, 'Mots oubliés, remplacés ou ajoutés : réciter ces versets encore.', 'btn-redo-memory')
     + group('🗣 Prononciation', pron, 'Écoutez (🔊) puis répétez le mot.', 'btn-redo-pron')
+    + lettersHtml
     + group('🎙 Mal entendus par le micro', misheard, 'Vous les avez touchés pour les valider : ils comptent justes.')
     + (flagged.length
       ? `<div class="rv">🚩 À revoir : ${flagged.length} mot(s)<br>${flagged.map((w) => `<span class="rw" dir="rtl">${w.text}</span> <small>(${QURAN[w.s - 1].en} ${w.ayah})</small>`).join('<br>')}</div>`
@@ -1771,6 +1846,7 @@ function finish() {
     sendReport([
       `Bilan « ${current.title} » : ${pct} % · ${ok}/${rec.words.length} mots justes du premier coup · niveau ${rec.level}`,
       ...memory.map((x) => '🧠 ' + txt(x)), ...pron.map((x) => '🗣 ' + txt(x)), ...misheard.map((x) => '🎙 ' + txt(x)),
+      ...letters.map((l) => `🔤 ${l.exp} dite comme ${l.got} : ${l.n} mot(s) sur ${l.withL} (${l.words.map((i) => rec.words[i].text).join(' ')})`),
       ...flagged.map((w) => `🚩 ${w.text} (${w.s}:${w.ayah})`), '', 'Journal du micro :', ...micLines,
     ].join('\n'));
   }
@@ -1781,6 +1857,7 @@ function finish() {
   };
   $('#btn-redo-memory')?.addEventListener('click', () => redo('Mémoire', memory));
   $('#btn-redo-pron')?.addEventListener('click', () => redo('Prononciation', pron));
+  $('#btn-redo-letters')?.addEventListener('click', () => redo('Lettres', letterWords));
   $('#btn-review-these')?.addEventListener('click', () => redo('À revoir', flagged.map((w) => ({ i: rec.words.indexOf(w) }))));
 }
 
