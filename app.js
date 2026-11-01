@@ -1976,7 +1976,30 @@ const recognitionAvailable = () => (rec.engine === 'server' ? !!rec.serverUrl : 
 // Le serveur Hifz renvoie le texte avec les voyelles : on les vérifie (sauf en Très souple)
 const vowelCheck = () => rec.engine === 'server';
 
+// Serveur arrêté et jeton GitHub enregistré (⚙) : on le démarre depuis le téléphone, puis le micro
+// s'ouvre tout seul quand il est prêt (2 à 3 minutes). Renvoie false sans jeton.
+async function serverBootFlow() {
+  if (rec.booting) return true;
+  if (!store.get('ghToken', '')) return false;
+  rec.booting = true;
+  const el = $('#heard');
+  try {
+    await bootServer();
+    el.textContent = '🚀 Démarrage du serveur Hifz (2 à 3 minutes)… le micro s\'ouvrira tout seul.';
+    const ok = await waitServerUp((s) => { el.textContent = `🚀 Démarrage du serveur Hifz… ${s} s (2 à 3 minutes en tout), le micro s'ouvrira tout seul.`; });
+    if (!ok) el.textContent = 'Le serveur ne démarre pas : réessayez, ou lancez « Démarrer Hifz » sur le PC.';
+    else if (!views.recite.hidden && !rec.listening) { el.textContent = '✅ Serveur prêt : récitez.'; rec.booting = false; startListening(); }
+  } catch (e) {
+    el.textContent = `Démarrage impossible (${e.message}) : vérifiez le jeton GitHub dans ⚙.`;
+  } finally {
+    rec.booting = false;
+  }
+  return true;
+}
+
 function startListening() {
+  if (rec.booting) return;
+  if (rec.engine === 'server' && rec.serverState !== 'up' && store.get('ghToken', '')) { serverBootFlow(); return; }
   if (!recognitionAvailable() || rec.listening) return;
   if (rec.committed.pos >= rec.words.length) resetRecite();
   rec.listening = true;
@@ -2046,6 +2069,8 @@ function startRecognizer() {
   r.onerror = (e) => {
     micLog('erreur : ' + e.error);
     if (e.error === 'network' && rec.engine === 'server') {
+      // serveur arrêté sans l'avoir annoncé (coupé par Kaggle) : démarrage depuis le téléphone si possible
+      if (store.get('ghToken', '')) { stopListening(); rec.serverState = 'down'; serverBootFlow(); return; }
       $('#heard').textContent = rec.serverState === 'down'
         ? 'Le serveur Hifz est arrêté : lancez « Démarrer Hifz » sur le PC (2 à 3 minutes), puis réessayez.'
         : 'Serveur Hifz injoignable : il démarre peut-être encore, réessayez dans une minute (ou repassez sur « Téléphone » dans ⚙).';

@@ -350,6 +350,7 @@ async function discoverServer(force) {
     try { m = JSON.parse(JSON.parse(line).message); } catch { continue; }
     if (!(await verifyAnnounce(m))) continue;
     rec.serverState = m.kind;
+    rec.serverT = m.t;
     if (m.kind === 'up' && m.url !== rec.serverUrl) {
       rec.serverUrl = m.url;
       store.set('serverUrl', m.url);
@@ -361,6 +362,52 @@ async function discoverServer(force) {
   }
   rec.serverState = '';
 }
+
+// ---------- Démarrage du serveur depuis le téléphone ----------
+// L'application demande à GitHub de lancer le workflow « Démarrer Hifz » du dépôt privé du serveur
+// (comme le raccourci du PC), avec un jeton GitHub limité à ce dépôt, enregistré dans ⚙ du
+// téléphone seulement (jamais dans le code public). Puis elle attend l'annonce du serveur.
+const GH = { repo: 'Sempac/hifz-server', workflow: 'demarrer.yml' };
+let bootAt = 0; // heure du dernier démarrage demandé (pas deux demandes en 6 min)
+
+async function bootServer() {
+  const token = store.get('ghToken', '');
+  if (!token) return false;
+  if (Date.now() - bootAt < 6 * 60000) return true;
+  const r = await fetch(`https://api.github.com/repos/${GH.repo}/actions/workflows/${GH.workflow}/dispatches`, {
+    method: 'POST', body: JSON.stringify({ ref: 'main' }),
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+  });
+  if (r.status !== 204) throw new Error(r.status === 401 || r.status === 403 || r.status === 404 ? 'jeton GitHub refusé' : `GitHub ${r.status}`);
+  bootAt = Date.now();
+  micLog('démarrage du serveur demandé (GitHub)');
+  return true;
+}
+
+// Attend une annonce « up » plus récente que la demande (8 min au plus) ; tick(secondes écoulées)
+async function waitServerUp(tick) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 8 * 60000) {
+    await new Promise((res) => setTimeout(res, 10000));
+    await discoverServer(true);
+    if (rec.serverState === 'up' && rec.serverT * 1000 > bootAt - 60000) return true;
+    tick(Math.round((Date.now() - t0) / 1000));
+  }
+  return false;
+}
+
+$('#gh-token').value = store.get('ghToken', '');
+$('#gh-token').addEventListener('change', () => store.set('ghToken', $('#gh-token').value.trim()));
+$('#btn-boot').addEventListener('click', async () => {
+  const out = $('#server-status');
+  await discoverServer(true);
+  if (rec.serverState === 'up') { out.textContent = '✅ Le serveur est déjà en marche.'; return; }
+  try {
+    if (!(await bootServer())) { out.textContent = 'Collez d\'abord le jeton GitHub ci-dessus.'; return; }
+    out.textContent = '🚀 Démarrage demandé (2 à 3 minutes)…';
+    out.textContent = (await waitServerUp((s) => { out.textContent = `🚀 Démarrage… ${s} s`; })) ? '✅ Serveur prêt.' : '❌ Le serveur ne démarre pas.';
+  } catch (e) { out.textContent = `❌ Démarrage impossible (${e.message}).`; }
+});
 
 applyEngineUi();
 serverFromLink();

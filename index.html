@@ -216,6 +216,9 @@
           <input id="server-url" type="url" placeholder="wss://…/ws" autocomplete="off" spellcheck="false" aria-label="Adresse du serveur">
           <button id="server-test" class="btn">Tester</button>
           <p id="server-status" class="sel-help"></p>
+          <input id="gh-token" type="password" placeholder="Jeton GitHub (démarrage depuis le téléphone)" autocomplete="off" spellcheck="false" aria-label="Jeton GitHub">
+          <button id="btn-boot" class="btn">🚀 Démarrer le serveur</button>
+          <p class="sel-help">Avec le jeton, appuyer sur 🎤 démarre le serveur s'il est arrêté (2 à 3 minutes), puis le micro s'ouvre tout seul. Le jeton reste dans ce téléphone.</p>
         </div>
         <label class="set-row">🔍 Loupe sur la ligne en cours
           <select id="lens-zoom" aria-label="Loupe">
@@ -255,7 +258,7 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help recite-only" id="recite-title"></p>
-        <p class="sel-help">Version 39</p>
+        <p class="sel-help">Version 40</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>
