@@ -339,11 +339,16 @@ body {
 }
 #view-recite .recite-tip, #view-recite .legend { display: none; }
 /* ce que le micro entend : petite ligne en bas de la page */
+/* bandeau des mots entendus : juste sous la ligne en cours (top posé par placeWaqf) */
 #view-recite .heard {
-  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 44px); z-index: 5;
-  margin: 0; min-height: 0; font-size: .9rem; pointer-events: none; color: var(--page-ink); opacity: .65;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: fixed; left: 22px; right: 12px; top: 52px; z-index: 7;
+  margin: 0; min-height: 0; padding: 4px 12px; border-radius: 10px; pointer-events: none;
+  font-size: 1.3rem; line-height: 1.5; color: var(--text);
+  background: color-mix(in srgb, var(--hint-bg) 92%, transparent); box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: top .2s ease;
 }
+/* loupe active : la page dessous est estompée, la ligne en cours et les messages ressortent */
+#view-recite.lensed .book-host { opacity: .45; transition: opacity .3s; }
 #view-recite .heard:empty { display: none; }
 #view-recite .coach {
   position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 72px); z-index: 6;
@@ -374,7 +379,7 @@ body {
 @keyframes waqf-pulse { from { background-color: color-mix(in srgb, var(--waqf) 60%, transparent); } to { background-color: color-mix(in srgb, var(--waqf) 20%, transparent); } }
 /* explication d'une erreur : encadré en haut, en grand, sur plusieurs lignes */
 #view-recite .fix {
-  position: absolute; left: 12px; right: 12px; top: 52px; z-index: 8; margin: 0; padding: 10px 14px;
+  position: fixed; left: 22px; right: 12px; top: 52px; z-index: 8; margin: 0; padding: 10px 14px; transition: top .2s ease;
   border-radius: 12px; background: var(--hint-bg); color: var(--text); box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
   font-size: 1.05rem; line-height: 1.6; text-align: center; pointer-events: none; direction: ltr;
 }

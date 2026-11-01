@@ -646,15 +646,30 @@ function showWaqf(j) {
 
 // L'étiquette d'arrêt se pose juste au-dessus de la ligne en cours (ou de la loupe) : en bas de
 // l'écran, on ne la voyait pas en récitant (01/11/2026). Au-dessous si la ligne est tout en haut.
+// Les messages (mots entendus, explication d'une erreur) se posent en bandeau juste sous la ligne en
+// cours, là où sont les yeux : la petite ligne tout en bas, on n'avait pas le temps de la lire en
+// récitant (01/11/2026). Au-dessus de la ligne s'il n'y a pas la place dessous.
 function placeWaqf() {
-  const el = $('#waqf-sign');
-  if (el.hidden) return;
   const lens = $('#lens');
   const anchor = !lens.hidden ? lens : document.querySelector('#view-recite .current');
-  if (!anchor) return;
-  const r = anchor.getBoundingClientRect(), h = el.offsetHeight || 28;
-  el.style.top = (r.top - h - 6 < 50 ? r.bottom + 6 : r.top - h - 6) + 'px';
+  if (!anchor || views.recite.hidden) return;
+  const r = anchor.getBoundingClientRect(), vr = views.recite.getBoundingClientRect();
+  let below = r.bottom + 6, above = r.top - 6;
+  const el = $('#waqf-sign');
+  if (!el.hidden) {
+    const h = el.offsetHeight || 28;
+    if (above - h < 50) { el.style.top = below + 'px'; below += h + 6; } else { el.style.top = above - h + 'px'; above -= h + 6; }
+  }
+  const items = [$('#heard'), $('#fix')].filter((x) => !x.hidden && x.textContent);
+  const total = items.reduce((s, x) => s + x.offsetHeight + 6, 0);
+  let y = below + total > vr.bottom - 40 && above - total > vr.top + 46 ? above - total : below;
+  for (const x of items) { x.style.top = y + 'px'; y += x.offsetHeight + 6; }
 }
+// texte ou explication qui change, page qui défile : le bandeau suit
+const placeSoon = () => { cancelAnimationFrame(placeSoon.f); placeSoon.f = requestAnimationFrame(placeWaqf); };
+for (const id of ['#heard', '#fix']) new MutationObserver(placeSoon).observe($(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+document.addEventListener('scroll', placeSoon, true);
+addEventListener('resize', placeSoon);
 
 function openRecite() {
   $('#recite-title').textContent = rangeTitle();
@@ -769,7 +784,8 @@ function renderBook(st, waqf = -1) {
 function updateLens(target) {
   const lens = $('#lens');
   const z = rec.lensZoom;
-  if (!rec.book || !z || !target || views.recite.hidden || !$('#summary').hidden) { lens.hidden = true; return; }
+  if (!rec.book || !z || !target || views.recite.hidden || !$('#summary').hidden) { lens.hidden = true; views.recite.classList.remove('lensed'); placeSoon(); return; }
+  views.recite.classList.add('lensed'); // la page sous la loupe est estompée
   const line = target.closest('.mline');
   const lr = line.getBoundingClientRect();
   if (!lr.height) { // page pas encore affichée (ouverture, page qui tourne) : on réessaie
@@ -1409,6 +1425,7 @@ function render() {
   const f = flagTarget();
   $('#flag-word').textContent = f >= 0 ? rec.words[f].text : '';
   $('#btn-flag').classList.toggle('off', f < 0);
+  placeSoon();
 }
 
 // ---------- « À revoir » : les fautes signalées par l'utilisateur ----------
