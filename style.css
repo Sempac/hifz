@@ -351,11 +351,13 @@ body {
   background: var(--hint-bg); color: var(--text); font-size: .85rem; text-align: center; pointer-events: none;
 }
 #view-recite .coach[hidden] { display: none; }
-/* signe d'arrêt : badge au-dessus des conseils + trait à la fin du mot où s'arrêter (à gauche, texte de droite à gauche) */
+/* signe d'arrêt : badge juste au-dessus de la ligne en cours (top posé par placeWaqf) + trait à la
+   fin du mot où s'arrêter (à gauche, texte de droite à gauche) */
 #view-recite .waqf-sign {
-  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 108px); z-index: 6;
+  position: fixed; left: 52px; right: 52px; top: 50%; z-index: 7;
   margin: 0 auto; width: fit-content; padding: 4px 12px; border-radius: 14px; pointer-events: none;
-  background: var(--current); color: #fff; font-size: .9rem; font-weight: 600;
+  background: var(--current); color: #fff; font-size: 1.05rem; font-weight: 600;
+  transition: top .2s ease;
 }
 #view-recite .waqf-sign[hidden] { display: none; }
 /* mot où s'arrêter : fond violet qui clignote + « ⏸ » à la fin du mot (à gauche : texte de droite
@@ -383,13 +385,15 @@ body {
 /* lettre ou voyelle fautive dans le mot attendu */
 #view-recite .fix .ar .spot { color: var(--bad); }
 #view-recite .fix div { font-size: 1rem; margin-top: 4px; }
-/* jauge du micro : fine barre au-dessus du bas du cadre (orange : trop bas, rouge : saturé) */
+/* jauge du micro : barre verticale sur le bord gauche, à hauteur des yeux (en bas, on ne la
+   voyait pas en récitant) ; elle monte avec la voix (orange : trop bas, rouge : saturé) */
 #view-recite .vu {
-  position: absolute; left: 52px; right: 52px; bottom: calc(env(safe-area-inset-bottom) + 36px); z-index: 5;
-  height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--page-ink) 12%, transparent); overflow: hidden;
+  position: fixed; left: 4px; top: 50%; transform: translateY(-50%); z-index: 6;
+  width: 12px; height: 38vh; border-radius: 6px; overflow: hidden;
+  background: color-mix(in srgb, var(--page-ink) 15%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--page-ink) 20%, transparent);
 }
 #view-recite .vu[hidden] { display: none; }
-#view-recite .vu i { display: block; height: 100%; width: 0; background: #3a9d5d; transition: width .15s linear; }
+#view-recite .vu i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: #3a9d5d; transition: height .15s linear; }
 #view-recite .vu.quiet i { background: #e0a030; }
 #view-recite .vu.loud i { background: #d64545; }
 #view-recite #no-speech { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }

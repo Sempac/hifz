@@ -634,7 +634,19 @@ function waqfAhead(pos) {
 function showWaqf(j) {
   const el = $('#waqf-sign');
   el.hidden = j < 0;
-  if (j >= 0) el.textContent = WAQF_LABEL[rec.words[j].stop];
+  if (j >= 0) { el.textContent = WAQF_LABEL[rec.words[j].stop]; requestAnimationFrame(placeWaqf); }
+}
+
+// L'étiquette d'arrêt se pose juste au-dessus de la ligne en cours (ou de la loupe) : en bas de
+// l'écran, on ne la voyait pas en récitant (01/11/2026). Au-dessous si la ligne est tout en haut.
+function placeWaqf() {
+  const el = $('#waqf-sign');
+  if (el.hidden) return;
+  const lens = $('#lens');
+  const anchor = !lens.hidden ? lens : document.querySelector('#view-recite .current');
+  if (!anchor) return;
+  const r = anchor.getBoundingClientRect(), h = el.offsetHeight || 28;
+  el.style.top = (r.top - h - 6 < 50 ? r.bottom + 6 : r.top - h - 6) + 'px';
 }
 
 function openRecite() {
@@ -781,6 +793,7 @@ function updateLens(target) {
   const vr = views.recite.getBoundingClientRect();
   const top = Math.max(vr.top + 46, Math.min(lr.top + lr.height / 2 - lensH / 2, vr.bottom - 42 - lensH));
   lens.style.top = top + 'px';
+  setTimeout(placeWaqf, 300); // après le glissement de la loupe (.25 s)
 }
 
 $('#lens-zoom').value = String(rec.lensZoom);
@@ -1679,6 +1692,7 @@ function replayAt(i) {
   const e = rec.words[i].norm;
   const close = !rec.shown.vow[i] && !rec.shown.ins[i] && (rec.shown.heard[i] || [])
     .find((x) => x !== e && lev(x, e) <= 2 && lev(x, e) / Math.max(x.length, e.length) <= 0.5);
+  const otherWords = (rec.shown.heard[i] || []).join(' '); // entendu à la place du mot (autre mot, mot ajouté)
   const st = clone(rec.shown);
   st.pos = i;
   st.marks.length = i;
@@ -1715,17 +1729,27 @@ function replayAt(i) {
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
   // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
   const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [markedWord(word, vowelWord)], [vowelExplain(word, vowelWord), '', true]] : null;
+  // toute alerte dit pourquoi : mot ajouté (lequel), autre mot dit (lequel), ou mot sauté, et où
+  // reprendre (après le mot précédent, sans dévoiler le mot attendu au premier bip)
+  const prev = i > 0 && rec.words[i - 1].s === rec.words[i].s ? rec.words[i - 1].text : '';
+  const where = prev ? [['après'], [prev, 'ok']] : [['au début du verset']];
+  const reason = otherWords
+    ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true]]
+    : [['⏭ Un mot a été sauté'], ...where, ['(rien n\'a été entendu à sa place).', '', true]];
   if (rec.retries[i] <= rec.beeps) {
     micLog('bip au mot ' + (i + 1));
-    $('#heard').textContent = extraWord ? '🔔 Mot en trop. Reprenez.' : vowelWord ? '🔔 Prononciation. Reprenez ce mot.' : '🔔 Erreur : reprenez à l\'endroit indiqué.';
-    showFix(extraWord ? [['🔔 Mot en trop :'], [extraWord, 'bad'], ['Reprenez sans lui.']] : vowelFix || [['🔔 Erreur : reprenez à l\'endroit indiqué.']]);
+    $('#heard').textContent = extraWord ? `🔔 Mot en trop : « ${extraWord} »` : vowelWord ? '🔔 Prononciation. Reprenez ce mot.'
+      : otherWords ? `🔔 Autre mot entendu : « ${otherWords} »` : '🔔 Mot sauté : reprenez à l\'endroit indiqué.';
+    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.']]
+      : vowelFix || [...reason, ['Reprenez à cet endroit.', '', true]]);
     playBeep(after(200));
   } else {
     micLog('prononciation du mot ' + (i + 1));
     rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
     $('#heard').textContent = '🔊 Écoutez le mot';
-    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['Le mot attendu :'], [word, 'ok']]
-      : vowelFix || [['🔊 Le mot :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.']]);
+    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Le mot attendu :'], [word, 'ok']]
+      : vowelFix || (otherWords ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['au lieu de'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true]]
+        : [['⏭ Mot sauté :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true]]));
     sayWords([i], after(600));
   }
 }

@@ -89,11 +89,11 @@ function coachFrames(buf) {
     coach.frames.push({ t: now, db: 10 * Math.log10(sum / 800 / 32768 ** 2 + 1e-12), clip });
   }
   while (coach.frames.length && coach.frames[0].t < now - COACH.window * 1000) coach.frames.shift();
-  // jauge : niveau des 200 dernières ms, de -60 dB (vide) à 0 dB (plein)
+  // jauge (verticale, bord gauche) : niveau des 200 dernières ms, de -60 dB (vide) à 0 dB (plein)
   const last = Math.max(...coach.frames.slice(-4).map((f) => f.db));
   const vu = $('#vu');
   vu.hidden = false;
-  vu.firstElementChild.style.width = Math.max(0, Math.min(100, (last + 60) / 60 * 100)) + '%';
+  vu.firstElementChild.style.height = Math.max(0, Math.min(100, (last + 60) / 60 * 100)) + '%';
   vu.className = 'vu' + (coach.frames.slice(-4).some((f) => f.clip) ? ' loud' : last < COACH.quiet ? ' quiet' : '');
   if (now - coach.checked >= 1000) { coach.checked = now; coachCheck(now); }
 }
