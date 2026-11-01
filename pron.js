@@ -15,9 +15,12 @@ function pronWord(i, st = rec.shown) {
   const p = st.pron?.[i], r = refPron[wordAudioUrl(rec.words[i])];
   if (!p || !r || !p.l || p.l !== r.l) return null;
   let worst = null;
+  // alif final muet : après le و du pluriel (« تَفَرَّقُوا ») ou du tanwīn (« جَمِيعًا ») ; il comptait
+  // 0-20 % alors qu'il ne se prononce pas (séance du 01/11/2026)
+  const mute = /(و|ً)ا$/.test(rec.words[i].text.normalize('NFC').replace(/[ۖ-ۭ]/g, '')) ? p.l.length - 1 : -1;
   p.s.forEach((u, k) => {
     // alif de liaison en tête (« ال » dit en continu) : il ne se prononce pas, le modèle l'écrit quand même
-    if (k === 0 && p.l[0] === 'ا') return;
+    if ((k === 0 && p.l[0] === 'ا') || k === mute) return;
     if (r.s[k] < PRON_REF_MIN) return;
     const v = Math.min(100, Math.round((100 * u) / r.s[k]));
     if (!worst || v < worst.v) worst = { v, l: p.l[k] };
