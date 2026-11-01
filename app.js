@@ -578,7 +578,12 @@ const rec = {
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
   beeps: store.get('beeps', 1),      // signaux (on reprend seul) avant le rappel prononcé
-  signal: store.get('signal', 'flash'), // signal d'erreur : éclair + vibration (micro ouvert) ou bip
+  // signal d'erreur : écran rouge + tic de 0,04 s (micro ouvert), écran rouge seul, ou bip ; l'ancien
+  // défaut « flash » passe une fois au tic (écran seul jugé insuffisant, pas de vibration, 01/11/2026)
+  signal: (() => {
+    if (!store.get('signalTick')) { store.set('signalTick', 1); if (store.get('signal') === 'flash') store.set('signal', 'tick'); }
+    return store.get('signal', 'tick');
+  })(),
   waqf: store.get('waqf', 'rec'),    // signes d'arrêt (WAQF_SHOWN)
   // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
@@ -1637,15 +1642,36 @@ const BEEP = (() => {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 })();
 
-// Signal sans son : éclair rouge autour de l'écran + vibration (Android ; l'iPhone ne vibre pas depuis
-// une page web). Le micro n'a pas besoin d'être coupé (rien à capter) : on redit le mot dès le signal,
-// alors qu'avec le bip le début du mot, dit pendant le bip, était perdu (01/11/2026).
+// « Tic » très court (0,04 s, 1 500 Hz) : joué sans couper le micro ; trop bref pour gêner la
+// reprise, le serveur n'en tire au plus qu'une lettre isolée (ignorée)
+const TICK = (() => {
+  const rate = 16000, n = rate * 0.04, buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, s) => [...s].forEach((c, k) => buf.setUint8(o + k, c.charCodeAt(0)));
+  str(0, 'RIFF'); buf.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true); buf.setUint16(22, 1, true); buf.setUint32(24, rate, true);
+  buf.setUint32(28, rate * 2, true); buf.setUint16(32, 2, true); buf.setUint16(34, 16, true);
+  str(36, 'data'); buf.setUint32(40, n * 2, true);
+  for (let k = 0; k < n; k++) {
+    const fade = Math.min(1, k / 48, (n - k) / 48);
+    buf.setInt16(44 + k * 2, Math.sin(2 * Math.PI * 1500 * k / rate) * 12000 * fade, true);
+  }
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+})();
+
+// Signal sans coupure du micro : écran rouge qui clignote 2 fois + vibration (Android, mais le S21 ne
+// vibre pas pendant que le micro écoute, 01/11/2026) + « tic » si choisi. On redit le mot dès le
+// signal, alors qu'avec le bip le début du mot, dit pendant le bip, était perdu (01/11/2026).
 function flashSignal() {
   const v = views.recite;
   v.classList.remove('flash');
   void v.offsetWidth; // relance l'animation
   v.classList.add('flash');
-  try { navigator.vibrate?.(150); } catch { /* pas de vibreur */ }
+  try { navigator.vibrate?.([120, 80, 120]); } catch { /* pas de vibreur */ }
+  if (rec.signal === 'tick' && !sayAudio) {
+    sayEl.onended = sayEl.onerror = null;
+    sayEl.src = TICK;
+    sayEl.play().catch(() => { /* son bloqué */ });
+  }
 }
 
 function playBeep(done) {
@@ -1761,7 +1787,7 @@ function replayAt(i) {
     ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true]]
     : [['⏭ Un mot a été sauté'], ...where, ['(rien n\'a été entendu à sa place).', '', true]];
   if (rec.retries[i] <= rec.beeps) {
-    micLog((rec.signal === 'beep' ? 'bip' : 'éclair') + ' au mot ' + (i + 1));
+    micLog(({ beep: 'bip', tick: 'éclair + tic' }[rec.signal] || 'éclair') + ' au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? `🔔 Mot en trop : « ${extraWord} »` : vowelWord ? '🔔 Prononciation. Reprenez ce mot.'
       : otherWords ? `🔔 Autre mot entendu : « ${otherWords} »` : '🔔 Mot sauté : reprenez à l\'endroit indiqué.';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.']]
@@ -1976,7 +2002,10 @@ function onResult(e) {
   }
   rec.heardCount = bestCount;
   const tail = bestText.split(/\s+/).slice(-8).join(' ');
-  $('#heard').textContent = rec.showDelay && newWords > 0 ? `⏱ ${(gap / 1000).toFixed(1)} s · ${tail}` : tail;
+  // mots dits après le mot faux (signal pas suivi) : pas affichés en bas, ils dévoileraient la suite
+  const waiting = best.back >= 0 && best.back === best.pos && best.ignored > 0;
+  $('#heard').textContent = waiting ? '⏪ Revenez au mot faux.'
+    : rec.showDelay && newWords > 0 ? `⏱ ${(gap / 1000).toFixed(1)} s · ${tail}` : tail;
   setShown(best, isFinal);
   // on a continué après le signal : rappel de revenir au mot faux (une fois par erreur)
   if (best.back >= 0 && best.back === best.pos && best.ignored >= 2 && rec.backShown !== best.back) {
