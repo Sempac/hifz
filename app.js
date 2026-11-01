@@ -615,7 +615,8 @@ const rec = {
 // ins       : mots en trop, par position du mot attendu devant lequel ils ont été ajoutés
 // vow       : mots reconnus mais avec une voyelle fausse (serveur Hifz) : ce qui a été entendu
 const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, vow: {}, grace: 0, graceSkip: true });
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, grace: st.grace, graceSkip: st.graceSkip });
+// back : mot faux où revenir après un signal (-1 : aucun) ; ignored : mots dits plus loin, ignorés en attendant
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, grace: st.grace, graceSkip: st.graceSkip, back: st.back ?? -1, ignored: st.ignored || 0 });
 const GRACE_WORDS = 2;
 
 // ---------- Signes d'arrêt (comme le cheikh qui fait signe de s'arrêter) ----------
@@ -1214,6 +1215,15 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // basmala récitée avant une sourate (absente du texte, sauf dans Al-Fatiha) : ignorée, ce ne sont
     // pas des mots en trop (« قُلْ » de 112:1 compté faux après la basmala, 31/10/2026)
     if (E[p].ayah === 1 && E[p].k === 0 && w !== E[p].norm && BASMALA.some((b) => same(w, b))) continue;
+    // après un signal, on doit revenir au mot faux ; si l'on a continué plus loin (signal pas vu), ces
+    // mots ne sont pas des fautes : ignorés en attendant le mot faux (sinon tout le reste passait en
+    // rouge, de « النَّصْرُ » à la fin de la récitation, 01/11/2026). Un nouvel essai du mot (même
+    // raté) n'est pas ignoré.
+    if (st.back !== p) st.back = -1;
+    else if (w !== E[p].norm && !same(w, E[p].norm) && E.slice(p + 1, p + 15).some((e) => e.norm === w || (w.length >= 3 && same(w, e.norm)))) {
+      st.ignored++;
+      continue;
+    }
     if (w === E[p].norm) {
       // serveur : un autre vrai mot du Coran dit juste avant à sa place (« وَإِيَّايَ فَارْهَبُونِ » puis
       // « وَإِيَّايَ فَاتَّقُونِ ») : se reprendre soi-même n'efface pas l'erreur, comme devant un cheikh
@@ -1707,6 +1717,8 @@ function replayAt(i) {
   const otherWords = (rec.shown.heard[i] || []).join(' '); // entendu à la place du mot (autre mot, mot ajouté)
   const st = clone(rec.shown);
   st.pos = i;
+  st.back = i;
+  st.ignored = 0;
   st.marks.length = i;
   st.extra = 0;
   st.pending = [];
@@ -1966,6 +1978,14 @@ function onResult(e) {
   const tail = bestText.split(/\s+/).slice(-8).join(' ');
   $('#heard').textContent = rec.showDelay && newWords > 0 ? `⏱ ${(gap / 1000).toFixed(1)} s · ${tail}` : tail;
   setShown(best, isFinal);
+  // on a continué après le signal : rappel de revenir au mot faux (une fois par erreur)
+  if (best.back >= 0 && best.back === best.pos && best.ignored >= 2 && rec.backShown !== best.back) {
+    rec.backShown = best.back;
+    const p = best.pos, prev = p > 0 && rec.words[p - 1].s === rec.words[p].s ? rec.words[p - 1].text : '';
+    micLog(`signal pas suivi : ${best.ignored} mots plus loin ignorés`);
+    flashSignal();
+    showFix(prev ? [['⏪ Revenez au mot faux : reprenez après'], [prev, 'ok']] : [['⏪ Revenez au mot faux : reprenez au début du verset.']]);
+  }
 }
 const LATE_WORDS = 5;   // mots arrivés d'un coup
 const LATE_MS = 2500;   // attente depuis la réponse précédente
