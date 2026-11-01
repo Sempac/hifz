@@ -619,9 +619,12 @@ const rec = {
 //             où le mot à retrouver doit vraiment être dit)
 // ins       : mots en trop, par position du mot attendu devant lequel ils ont été ajoutés
 // vow       : mots reconnus mais avec une voyelle fausse (serveur Hifz) : ce qui a été entendu
-const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, vow: {}, grace: 0, graceSkip: true });
+const newState = () => ({ pos: 0, marks: [], extra: 0, pending: [], heard: {}, ins: {}, vow: {}, pron: {}, grace: 0, graceSkip: true });
 // back : mot faux où revenir après un signal (-1 : aucun) ; ignored : mots dits plus loin, ignorés en attendant
-const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, grace: st.grace, graceSkip: st.graceSkip, back: st.back ?? -1, ignored: st.ignored || 0 });
+// pron : lettres du mot et leur probabilité (serveur), pour le niveau de prononciation (pron.js)
+const clone = (st) => ({ pos: st.pos, marks: st.marks.slice(), extra: st.extra, pending: st.pending.slice(), heard: { ...st.heard }, ins: { ...st.ins }, vow: { ...st.vow }, pron: { ...st.pron }, grace: st.grace, graceSkip: st.graceSkip, back: st.back ?? -1, ignored: st.ignored || 0 });
+// probabilité des lettres de chaque mot entendu (serveur), dans l'ordre des mots passés à align
+let alignPron = null;
 const GRACE_WORDS = 2;
 
 // ---------- Signes d'arrêt (comme le cheikh qui fait signe de s'arrêter) ----------
@@ -660,14 +663,14 @@ function placeWaqf() {
     const h = el.offsetHeight || 28;
     if (above - h < 50) { el.style.top = below + 'px'; below += h + 6; } else { el.style.top = above - h + 'px'; above -= h + 6; }
   }
-  const items = [$('#heard'), $('#fix')].filter((x) => !x.hidden && x.textContent);
+  const items = [$('#heard'), $('#pron-note'), $('#fix')].filter((x) => !x.hidden && x.textContent);
   const total = items.reduce((s, x) => s + x.offsetHeight + 6, 0);
   let y = below + total > vr.bottom - 40 && above - total > vr.top + 46 ? above - total : below;
   for (const x of items) { x.style.top = y + 'px'; y += x.offsetHeight + 6; }
 }
 // texte ou explication qui change, page qui défile : le bandeau suit
 const placeSoon = () => { cancelAnimationFrame(placeSoon.f); placeSoon.f = requestAnimationFrame(placeWaqf); };
-for (const id of ['#heard', '#fix']) new MutationObserver(placeSoon).observe($(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+for (const id of ['#heard', '#pron-note', '#fix']) new MutationObserver(placeSoon).observe($(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
 document.addEventListener('scroll', placeSoon, true);
 addEventListener('resize', placeSoon);
 
@@ -1251,6 +1254,7 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
       const wrong = rec.engine === 'server' ? st.pending.filter((x) => x.length >= 3 && isQuranWord(x) && lev(x, w) >= 2 && !soon(x, p)) : [];
       advanceOk(st, p);
       if (wrong.length) { st.marks[p] = 'bad'; st.heard[p] = wrong; } else checkVowels(st, p, raw[i], stops.has(i));
+      if (alignPron?.[i]) st.pron[p] = alignPron[i];
       continue;
     }
     if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
@@ -1260,7 +1264,11 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && w === E[p + k].norm) { exact = k; break; }
     }
-    if (exact) { skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i], stops.has(i)); continue; }
+    if (exact) {
+      skipped(st, p, exact); advanceOk(st, p + exact); checkVowels(st, p + exact, raw[i], stops.has(i));
+      if (alignPron?.[i]) st.pron[p + exact] = alignPron[i];
+      continue;
+    }
     // deux mots attendus entendus collés (« أَيْنَمَا » pour « أَيْنَ مَا ») : avant la simple
     // ressemblance, sinon « أينما » passerait pour « أين » et « ما » pour un oubli
     const both = p + 1 < N ? E[p].norm + E[p + 1].norm : null;
@@ -1771,6 +1779,7 @@ function replayAt(i) {
   if (vowelWord && !rec.letterFaults[i]) { const f = letterFault(rec.words[i].text, vowelWord); if (f) rec.letterFaults[i] = f; }
   for (const k of Object.keys(st.ins)) if (Number(k) >= i) delete st.ins[k];
   for (const k of Object.keys(st.vow)) if (Number(k) >= i) delete st.vow[k];
+  for (const k of Object.keys(st.pron)) if (Number(k) >= i) delete st.pron[k];
   rec.shown = rec.committed = st;
   newSession();
   render();
@@ -1924,6 +1933,7 @@ function finish() {
     + group('🧠 Mémoire', memory, 'Mots oubliés, remplacés ou ajoutés : réciter ces versets encore.', 'btn-redo-memory')
     + group('🗣 Prononciation', pron, 'Écoutez (🔊) puis répétez le mot.', 'btn-redo-pron')
     + lettersHtml
+    + pronSummaryHtml()
     + group('🎙 Mal entendus par le micro', misheard, 'Vous les avez touchés pour les valider : ils comptent justes.')
     + (flagged.length
       ? `<div class="rv">🚩 À revoir : ${flagged.length} mot(s)<br>${flagged.map((w) => `<span class="rw" dir="rtl">${w.text}</span> <small>(${QURAN[w.s - 1].en} ${w.ayah})</small>`).join('<br>')}</div>`
@@ -1940,7 +1950,8 @@ function finish() {
       `Bilan « ${current.title} » : ${pct} % · ${ok}/${rec.words.length} mots justes du premier coup · niveau ${rec.level}`,
       ...memory.map((x) => '🧠 ' + txt(x)), ...pron.map((x) => '🗣 ' + txt(x)), ...misheard.map((x) => '🎙 ' + txt(x)),
       ...letters.map((l) => `🔤 ${l.exp} dite comme ${l.got} : ${l.n} mot(s) sur ${l.withL} (${l.words.map((i) => rec.words[i].text).join(' ')})`),
-      ...flagged.map((w) => `🚩 ${w.text} (${w.s}:${w.ayah})`), '', 'Journal du micro :', ...micLines,
+      ...flagged.map((w) => `🚩 ${w.text} (${w.s}:${w.ayah})`), ...pronSummaryText(),
+      '', 'Journal du micro :', ...micLines,
     ].join('\n'));
   }
   $('#summary').querySelectorAll('.say-w').forEach((b) => b.addEventListener('click', () => playWord(+b.dataset.i)));
@@ -1972,9 +1983,12 @@ function sessionText(results, a) {
     // indices des mots, la voyelle finale n'y est pas exigée) ; sauf morceau coupé de force (cut :
     // trop long, sans pause : « فِي جِيدِهَا حَبْلٍ » au lieu de « حَبْلٌ » passait, 31/10/2026)
     rec.segEnds = new Set();
+    rec.pronHeard = []; // probabilité des lettres, mot par mot (mêmes mots que le texte renvoyé)
     let n = 0;
     for (const r of segs) {
-      n += r[0].transcript.split(/\s+/).filter((w) => norm(w)).length;
+      const ws = r[0].transcript.trim().split(/\s+/);
+      ws.forEach((w, j) => { if (norm(w)) rec.pronHeard.push(r.pron?.[j] || null); });
+      n += ws.filter((w) => norm(w)).length;
       if (!r.cut) rec.segEnds.add(n - 1);
     }
     return segs.map((r) => r[0].transcript.trim()).join(' ');
@@ -2000,6 +2014,7 @@ function onResult(e) {
     const raw = text.split(/\s+/).filter((t) => norm(t)); // mots tels qu'entendus (avec voyelles si serveur)
     const heard = raw.map(norm);
     const stops = rec.engine === 'server' ? new Set([...rec.segEnds].map((k) => k - rec.offset)) : new Set();
+    alignPron = rec.engine === 'server' && rec.pronHeard ? rec.pronHeard.slice(rec.offset) : null;
     const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset), stops, rec.engine === 'server' && !isFinal);
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
@@ -2024,6 +2039,7 @@ function onResult(e) {
   $('#heard').textContent = waiting ? '⏪ Revenez au mot faux.'
     : rec.showDelay && newWords > 0 ? `⏱ ${(gap / 1000).toFixed(1)} s · ${tail}` : tail;
   setShown(best, isFinal);
+  if (rec.engine === 'server') pronUpdate(rec.shown, isFinal);
   // on a continué après le signal : rappel de revenir au mot faux (une fois par erreur)
   if (best.back >= 0 && best.back === best.pos && best.ignored >= 2 && rec.backShown !== best.back) {
     rec.backShown = best.back;
@@ -2075,6 +2091,7 @@ function startListening() {
   micLines.length = 0;
   micLog('micro lancé');
   startRecognizer();
+  if (rec.engine === 'server') pronPrefetch();
   rec.timer = setInterval(() => {
     // après 5 s sans progression (8 s avec le serveur, qui répond avec un peu de retard), le mot
     // attendu apparaît en gris ; pas pendant la lecture de l'explication d'une erreur (#fix)

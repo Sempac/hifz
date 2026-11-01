@@ -341,7 +341,7 @@ body {
 /* ce que le micro entend : petite ligne en bas de la page */
 /* bandeau des mots entendus : juste sous la ligne en cours (top posé par placeWaqf) */
 #view-recite .heard {
-  position: fixed; left: 22px; right: 12px; top: 52px; z-index: 7;
+  position: fixed; left: 22px; right: 22px; top: 52px; z-index: 7;
   margin: 0; min-height: 0; padding: 4px 12px; border-radius: 10px; pointer-events: none;
   font-size: 1.3rem; line-height: 1.5; color: var(--text);
   background: color-mix(in srgb, var(--hint-bg) 92%, transparent); box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
@@ -379,7 +379,7 @@ body {
 @keyframes waqf-pulse { from { background-color: color-mix(in srgb, var(--waqf) 60%, transparent); } to { background-color: color-mix(in srgb, var(--waqf) 20%, transparent); } }
 /* explication d'une erreur : encadré en haut, en grand, sur plusieurs lignes */
 #view-recite .fix {
-  position: fixed; left: 22px; right: 12px; top: 52px; z-index: 8; margin: 0; padding: 10px 14px; transition: top .2s ease;
+  position: fixed; left: 22px; right: 22px; top: 52px; z-index: 8; margin: 0; padding: 10px 14px; transition: top .2s ease;
   border-radius: 12px; background: var(--hint-bg); color: var(--text); box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
   font-size: 1.05rem; line-height: 1.6; text-align: center; pointer-events: none; direction: ltr;
 }
@@ -401,6 +401,38 @@ body {
 #view-recite .vu i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: #3a9d5d; transition: height .15s linear; }
 #view-recite .vu.quiet i { background: #e0a030; }
 #view-recite .vu.loud i { background: #d64545; }
+/* niveau de prononciation du dernier mot (comparé au récitateur) : barre sur le bord droit, en face
+   de la jauge du micro, la lettre la plus faible et son % dessous */
+#view-recite .pron {
+  position: fixed; right: 4px; top: 50%; transform: translateY(-50%); z-index: 6;
+  width: 14px; height: 38vh; border-radius: 7px;
+  background: color-mix(in srgb, var(--page-ink) 15%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--page-ink) 20%, transparent);
+}
+#view-recite .pron[hidden] { display: none; }
+#view-recite .pron i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 7px; background: #3a9d5d; transition: height .3s ease, background .3s; }
+#view-recite .pron.mid i { background: #e0a030; }
+#view-recite .pron.low i { background: #d64545; }
+#view-recite .pron b {
+  position: absolute; right: 0; bottom: calc(100% + 6px); white-space: nowrap; padding: 2px 6px; border-radius: 8px;
+  font: 600 1.05rem "Amiri Quran", serif; color: #fff; background: #3a9d5d; display: flex; gap: 4px; direction: ltr;
+}
+#view-recite .pron.mid b { background: #e0a030; }
+#view-recite .pron.low b { background: #d64545; }
+#view-recite .pron b:empty { display: none; }
+/* note du verset qu'on vient de finir (dans la pile des bandeaux, sous la ligne en cours) */
+#view-recite .pron-note {
+  position: fixed; left: 22px; right: 22px; top: 52px; z-index: 7; margin: 0; padding: 6px 12px; border-radius: 10px;
+  font-size: 1rem; line-height: 1.7; color: var(--text); background: var(--hint-bg); box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+  border-left: 6px solid #3a9d5d; transition: top .2s ease; direction: ltr; text-align: left;
+}
+#view-recite .pron-note[hidden] { display: none; }
+#view-recite .pron-note.mid { border-left-color: #e0a030; }
+#view-recite .pron-note.low { border-left-color: #d64545; }
+#view-recite .pron-note .pw { border: 0; background: none; color: inherit; font: inherit; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; }
+#view-recite .pron-note .pw bdi[lang] { font-family: "Amiri Quran", serif; font-size: 1.25rem; }
+.pron-badge { display: inline-block; min-width: 2.2em; text-align: center; border-radius: 8px; color: #fff; font-weight: 700; background: #3a9d5d; }
+.pron-badge.mid { background: #e0a030; }
+.pron-badge.low { background: #d64545; }
 #view-recite #no-speech { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }
 
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
