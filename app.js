@@ -577,7 +577,8 @@ const rec = {
   flagged: new Set(),   // mots signalés comme fautes (✗) pendant cette récitation
   reviewOut: null,      // mots sortis de « À revoir » à la fin de cette récitation (null : pas encore compté)
   replay: store.get('replay', true), // reprise sur erreur
-  beeps: store.get('beeps', 1),      // bips (on reprend seul) avant le rappel prononcé
+  beeps: store.get('beeps', 1),      // signaux (on reprend seul) avant le rappel prononcé
+  signal: store.get('signal', 'flash'), // signal d'erreur : éclair + vibration (micro ouvert) ou bip
   waqf: store.get('waqf', 'rec'),    // signes d'arrêt (WAQF_SHOWN)
   // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
@@ -1626,6 +1627,17 @@ const BEEP = (() => {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 })();
 
+// Signal sans son : éclair rouge autour de l'écran + vibration (Android ; l'iPhone ne vibre pas depuis
+// une page web). Le micro n'a pas besoin d'être coupé (rien à capter) : on redit le mot dès le signal,
+// alors qu'avec le bip le début du mot, dit pendant le bip, était perdu (01/11/2026).
+function flashSignal() {
+  const v = views.recite;
+  v.classList.remove('flash');
+  void v.offsetWidth; // relance l'animation
+  v.classList.add('flash');
+  try { navigator.vibrate?.(150); } catch { /* pas de vibreur */ }
+}
+
 function playBeep(done) {
   sayAudio = sayEl;
   sayEl.onended = sayEl.onerror = () => { sayAudio = null; done(); };
@@ -1737,12 +1749,13 @@ function replayAt(i) {
     ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true]]
     : [['⏭ Un mot a été sauté'], ...where, ['(rien n\'a été entendu à sa place).', '', true]];
   if (rec.retries[i] <= rec.beeps) {
-    micLog('bip au mot ' + (i + 1));
+    micLog((rec.signal === 'beep' ? 'bip' : 'éclair') + ' au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? `🔔 Mot en trop : « ${extraWord} »` : vowelWord ? '🔔 Prononciation. Reprenez ce mot.'
       : otherWords ? `🔔 Autre mot entendu : « ${otherWords} »` : '🔔 Mot sauté : reprenez à l\'endroit indiqué.';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.']]
       : vowelFix || [...reason, ['Reprenez à cet endroit.', '', true]]);
-    playBeep(after(200));
+    if (rec.signal === 'beep') playBeep(after(200));
+    else { flashSignal(); after(0)(); }
   } else {
     micLog('prononciation du mot ' + (i + 1));
     rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
@@ -2119,6 +2132,12 @@ $('#waqf').value = rec.waqf;
 $('#waqf').addEventListener('change', () => {
   rec.waqf = $('#waqf').value;
   store.set('waqf', rec.waqf);
+});
+
+$('#signal').value = rec.signal;
+$('#signal').addEventListener('change', () => {
+  rec.signal = $('#signal').value;
+  store.set('signal', rec.signal);
 });
 
 $('#beeps').value = String(rec.beeps);

@@ -234,11 +234,17 @@
             <option value="all">Tous les arrêts permis (+ ۚ)</option>
           </select>
         </label>
-        <label class="set-row">🔔 Bips avant la prononciation
-          <select id="beeps" aria-label="Bips avant la prononciation">
+        <label class="set-row">🚨 Signal d'erreur
+          <select id="signal" aria-label="Signal d'erreur">
+            <option value="flash">💡 Éclair rouge + vibration (on redit le mot tout de suite)</option>
+            <option value="beep">🔔 Bip sonore</option>
+          </select>
+        </label>
+        <label class="set-row">Signaux avant la prononciation
+          <select id="beeps" aria-label="Signaux avant la prononciation">
             <option value="0">Aucun (prononciation tout de suite)</option>
-            <option value="1">1 bip, puis la prononciation</option>
-            <option value="2">2 bips, puis la prononciation</option>
+            <option value="1">1 signal, puis la prononciation</option>
+            <option value="2">2 signaux, puis la prononciation</option>
           </select>
         </label>
         <label class="opt"><input type="checkbox" id="opt-phrase"> 📱 Écoute par phrase (à essayer sur iPhone si l'application tarde à suivre)</label>
@@ -249,7 +255,7 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help recite-only" id="recite-title"></p>
-        <p class="sel-help">Version 38</p>
+        <p class="sel-help">Version 39</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>
