@@ -582,3 +582,5 @@ body {
 @keyframes err-flash {
   0%, 22% { opacity: 1; } 32% { opacity: .1; } 42%, 60% { opacity: 1; } 100% { opacity: 0; }
 }
+/* bouton « répéter ce mot » dans l'encadré d'erreur : seul élément cliquable du bandeau */
+#view-recite .fix .fix-drill { pointer-events: auto; margin-top: 6px; font-size: .95rem; }

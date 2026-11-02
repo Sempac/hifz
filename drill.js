@@ -11,7 +11,9 @@ const DRILL_SHARE = 0.5;
 // lettre avec laquelle on confond le plus souvent chaque lettre (si le bilan n'en a pas noté d'autre)
 const CONFUSED_WITH = { 'ص': 'س', 'ض': 'د', 'ط': 'ت', 'ظ': 'ز', 'ذ': 'ز', 'ث': 'س', 'ق': 'ك', 'ح': 'ه', 'ه': 'ح', 'ع': 'ء', 'ل': 'ن', 'ر': 'ل', 'س': 'ص', 'ز': 'ذ' };
 
-const drill = { letter: '', alt: '', words: [], i: 0, done: new Set(), busy: false };
+// back : mot de la récitation en cours travaillé seul (-1 : entraînement ouvert depuis le bilan ou l'accueil)
+const drill = { letter: '', alt: '', words: [], i: 0, done: new Set(), busy: false, back: -1, tries: 0 };
+const DRILL_LOOP_MAX = 8; // essais enchaînés d'eux-mêmes (sans toucher l'écran) avant de laisser la main
 
 // mots du Coran contenant la lettre (juz 30 : mots courts et connus), pour s'entraîner sans bilan
 function drillWordsFor(letter, max = 10) {
@@ -38,6 +40,8 @@ function openDrill(letter, alt, words) {
   drill.words = (words && words.length ? words : drillWordsFor(letter)).slice(0, 12);
   drill.i = 0;
   drill.done = new Set();
+  drill.back = -1;
+  drill.tries = 0;
   $('#drill-pick').hidden = true;
   $('#drill-main').hidden = false;
   $('#drill-title').textContent = `🔤 Lettre ${bidi(letter)}`;
@@ -45,6 +49,33 @@ function openDrill(letter, alt, words) {
   go('drill');
   drillShow();
 }
+
+// Depuis la récitation : le mot mal prononcé seul ; on écoute le récitateur, puis on répète en boucle
+// (le micro se relance seul après chaque essai) jusqu'au vert, et l'on revient au verset sur ce mot
+function openDrillWord(i) {
+  const f = rec.letterFaults[i];
+  if (!f) return;
+  micLog(`entraînement du mot ${i + 1} (${f.exp} dit comme ${f.got})`);
+  openDrill(f.exp, f.got, [rec.words[i]]);
+  drill.back = i;
+  drillShow();
+  sayEl.onended = sayEl.onerror = () => { sayEl.onended = sayEl.onerror = null; setTimeout(drillTry, 300); };
+  sayEl.src = wordAudioUrl(rec.words[i]);
+  sayEl.play().catch(() => { sayEl.onended = sayEl.onerror = null; drillTry(); });
+}
+
+// retour au verset (mot validé, bouton ou flèche ←) : la récitation reprend au mot travaillé
+addEventListener('popstate', () => {
+  if (drill.back < 0 || views.recite.hidden) return;
+  const i = drill.back;
+  drill.back = -1;
+  mic.sink = null;
+  rec.lastReplayAt = -1;
+  $('#heard').textContent = '↩ Reprenez au mot travaillé.';
+  render();
+  startListening(true);
+  micLog(`retour au verset, mot ${i + 1}`);
+});
 
 function drillPick() {
   const stats = store.get('letters', {});
@@ -70,6 +101,11 @@ function drillShow() {
   $('#drill-word').innerHTML = w ? drillWordHtml(w) : '';
   $('#drill-result').innerHTML = w ? '<p class="tip">🔊 Écoutez le récitateur, puis 🎤 répétez le mot.</p>' : '';
   $('#drill-progress').textContent = `Mot ${Math.min(drill.i + 1, drill.words.length)} / ${drill.words.length} · validés : ${drill.done.size}`;
+  $('#drill-next').textContent = drill.back >= 0 ? '↩ Revenir au verset' : 'Suivant ➜';
+  if (w && drill.back >= 0) {
+    $('#drill-result').innerHTML = '<p class="tip">🔊 Écoutez le récitateur, puis répétez le mot, plusieurs fois si besoin : le micro se relance seul. Au vert, retour au verset.</p>';
+    $('#drill-progress').textContent = '';
+  }
   if (!w) $('#drill-result').innerHTML = `<p>🎉 Série terminée : ${drill.done.size} mot(s) validé(s) sur ${drill.words.length}.</p>`;
 }
 
@@ -112,7 +148,7 @@ async function drillTry() {
   $('#drill-result').innerHTML = '<p>🎤 Je vous écoute : dites le mot…</p>';
   try {
     const pcm = await drillRecord();
-    if (!pcm) { $('#drill-result').innerHTML = '<p>Je n\'ai rien entendu : réessayez, un peu plus fort.</p>'; return; }
+    if (!pcm) { drill.tries = DRILL_LOOP_MAX; $('#drill-result').innerHTML = '<p>Je n\'ai rien entendu : réessayez, un peu plus fort.</p>'; return; }
     $('#drill-result').innerHTML = '<p>⏳ Comparaison avec le récitateur…</p>';
     const base = rec.serverUrl.replace(/^wss:/, 'https:').replace(/\/ws$/, '');
     const q = new URLSearchParams({ word: w.text, letter: drill.letter, alt: drill.alt, ref: wordAudioUrl(w) });
@@ -146,6 +182,18 @@ function drillVerdict(w, r) {
         : `🟠 Pas encore : votre ${bidi(drill.letter)} reste faible. Écoutez et recommencez.`}</p>`
     + `<p class="tip">Entendu : « ${r.user.text || '…'} »</p>`;
   $('#drill-progress').textContent = `Mot ${drill.i + 1} / ${drill.words.length} · validés : ${drill.done.size}`;
+  if (drill.back < 0) return;
+  // mot de la récitation : au vert, retour au verset ; sinon nouvel essai tout seul (quelques fois)
+  drill.tries++;
+  $('#drill-progress').textContent = `Essai ${drill.tries}`;
+  if (ok) {
+    $('#drill-result').insertAdjacentHTML('beforeend', '<p>↩ Retour au verset…</p>');
+    setTimeout(() => { if (drill.back >= 0 && !views.drill.hidden) history.back(); }, 1500);
+  } else if (drill.tries < DRILL_LOOP_MAX) {
+    setTimeout(() => { if (drill.back >= 0 && !views.drill.hidden) drillTry(); }, 1200);
+  } else {
+    $('#drill-result').insertAdjacentHTML('beforeend', '<p class="tip">Touchez 🎤 pour réessayer, ou ↩ pour revenir au verset.</p>');
+  }
 }
 
 $('#drill-listen').addEventListener('click', () => {
@@ -156,5 +204,10 @@ $('#drill-listen').addEventListener('click', () => {
   sayEl.play().catch(() => { /* hors ligne */ });
 });
 $('#drill-rec').addEventListener('click', drillTry);
-$('#drill-next').addEventListener('click', () => { if (drill.i < drill.words.length) drill.i++; drillShow(); });
+$('#drill-next').addEventListener('click', () => {
+  if (drill.back >= 0) { history.back(); return; }
+  if (drill.i < drill.words.length) drill.i++;
+  drillShow();
+});
+$('#drill-rec').addEventListener('click', () => { drill.tries = 0; });
 $('#btn-letters').addEventListener('click', () => { if (QURAN.length) drillPick(); });

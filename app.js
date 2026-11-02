@@ -1817,7 +1817,7 @@ function replayAt(i) {
   const word = rec.words[i].text;
   // explication détaillée dans l'encadré (la ligne du bas est remplacée par les mots entendus
   // dès la reprise) ; pour un oubli ou un autre mot, le mot attendu n'est montré qu'à la prononciation
-  const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [markedWord(word, vowelWord)], [vowelExplain(word, vowelWord), '', true]] : null;
+  const vowelFix = vowelWord ? [['🔤 Prononciation : vous avez dit'], [vowelWord, 'bad'], ['au lieu de'], [markedWord(word, vowelWord)], [vowelExplain(word, vowelWord), '', true], [drillButton(i)]] : null;
   // toute alerte dit pourquoi : mot ajouté (lequel), autre mot dit (lequel), ou mot sauté, et où
   // reprendre (après le mot précédent, sans dévoiler le mot attendu au premier bip)
   const prev = i > 0 && rec.words[i - 1].s === rec.words[i].s ? rec.words[i - 1].text : '';
@@ -1842,6 +1842,19 @@ function replayAt(i) {
         : [['⏭ Mot sauté :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true]]));
     sayWords([i], after(600));
   }
+}
+
+// Lettre dite comme une autre (« سِرَاطٍ » pour « صِرَاطٍ ») : bouton pour répéter ce mot tout de suite,
+// comparé au récitateur, jusqu'à ce qu'il soit bon ; on revient ensuite au verset sur ce mot (02/11/2026)
+function drillButton(i) {
+  const f = rec.letterFaults[i];
+  if (!f || rec.engine !== 'server' || !LETTER_TIPS[f.exp]) return null;
+  const div = document.createElement('div'), b = document.createElement('button');
+  b.className = 'btn fix-drill';
+  b.textContent = `🎯 Répéter ce mot jusqu'au vert`;
+  b.addEventListener('click', () => openDrillWord(i));
+  div.append(b);
+  return div;
 }
 
 // Encadré d'explication d'une erreur, en haut de l'écran, en grand : morceaux [texte, mot arabe
@@ -2092,7 +2105,7 @@ async function serverBootFlow() {
   return true;
 }
 
-function startListening() {
+function startListening(again = false) {
   if (rec.booting) return;
   if (rec.engine === 'server' && rec.serverState !== 'up' && store.get('ghToken', '')) { serverBootFlow(); return; }
   if (!recognitionAvailable() || rec.listening) return;
@@ -2100,9 +2113,8 @@ function startListening() {
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
-  micT0 = Date.now();
-  micLines.length = 0;
-  micLog('micro lancé');
+  if (!again) { micT0 = Date.now(); micLines.length = 0; }
+  micLog(again ? 'micro relancé (retour au verset)' : 'micro lancé');
   startRecognizer();
   if (rec.engine === 'server') pronPrefetch();
   rec.timer = setInterval(() => {
