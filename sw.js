@@ -1,6 +1,6 @@
 // Cache de l'application pour qu'elle s'ouvre sans internet.
 // Changer VERSION quand la liste SHELL change.
-const VERSION = 'hifz-v49';
+const VERSION = 'hifz-v50';
 const SHELL = [
   './',
   'index.html',

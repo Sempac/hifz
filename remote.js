@@ -388,9 +388,13 @@ async function bootServer() {
 async function waitServerUp(tick) {
   const t0 = Date.now();
   while (Date.now() - t0 < 8 * 60000) {
-    await new Promise((res) => setTimeout(res, 10000));
+    // toutes les 5 s (10 s avant : en moyenne 5 s perdues après l'annonce, 02/11/2026)
+    await new Promise((res) => setTimeout(res, 5000));
     await discoverServer(true);
-    if (rec.serverState === 'up' && rec.serverT * 1000 > bootAt - 60000) return true;
+    if (rec.serverState === 'up' && rec.serverT * 1000 > bootAt - 60000) {
+      micLog(`serveur prêt ${Math.round((rec.serverT * 1000 - bootAt) / 1000)} s après la demande`);
+      return true;
+    }
     tick(Math.round((Date.now() - t0) / 1000));
   }
   return false;
