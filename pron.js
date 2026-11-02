@@ -87,13 +87,38 @@ function ayahPron(s, a, st = rec.shown) {
   return { note, weak: items.filter((x) => x.v < PRON_OK).sort((x, y) => x.v - y.v).slice(0, 3) };
 }
 
+// ---------- Aḥkām (2.0, réglage ⚙ « Vérifier les aḥkām ») : longueur des madd ----------
+// Le serveur mesure chaque madd en « temps » (durée / syllabe courte du même morceau). Récitateurs :
+// muttaṣil / munfaṣil 4,6 à 8 (02/11/2026) ; en dessous de MADD_MIN, le madd est signalé trop court.
+// Pas une faute (pas de rappel) : une remarque à la fin du verset et dans le bilan.
+const MADD_MIN = 3.5;
+const MADD_LABEL = { muttasil: 'madd muttaṣil', munfasil: 'madd munfaṣil' };
+
+// Madd devant une hamza des mots justes du verset : { short: [{ i, typ, r }], n: madd mesurés }
+function ayahMadd(s, a, st = rec.shown) {
+  const out = { short: [], n: 0 };
+  if (!rec.ahkam) return out;
+  rec.words.forEach((w, i) => {
+    if (w.s !== s || w.ayah !== a || markOf(st, i) !== 'ok') return;
+    for (const [typ, r] of st.pron?.[i]?.m || []) {
+      if (!MADD_LABEL[typ]) continue;
+      out.n++;
+      if (r < MADD_MIN) out.short.push({ i, typ, r });
+    }
+  });
+  return out;
+}
+
+const maddHtml = (x, cls) => `<button class="${cls}" data-i="${x.i}"><bdi lang="ar">${rec.words[x.i].text}</bdi> (${String(x.r).replace('.', ',')} temps)</button>`;
+
 function showAyahNote(s, a, st) {
-  const r = ayahPron(s, a, st);
-  if (!r) return;
+  const r = ayahPron(s, a, st), m = ayahMadd(s, a, st);
+  if (!r && !m.short.length) return;
   const el = $('#pron-note');
-  el.className = 'pron-note ' + pronClass(r.note);
-  el.innerHTML = `🎙 Verset ${a} : <b>${r.note}/100</b>`
-    + r.weak.map((x) => ` · <button class="pw" data-i="${x.i}"><bdi lang="ar">${rec.words[x.i].text}</bdi> (${x.v} % · <bdi>${x.l}</bdi>)</button>`).join('');
+  el.className = 'pron-note ' + (r ? pronClass(r.note) : 'mid');
+  el.innerHTML = (r ? `🎙 Verset ${a} : <b>${r.note}/100</b>`
+    + r.weak.map((x) => ` · <button class="pw" data-i="${x.i}"><bdi lang="ar">${rec.words[x.i].text}</bdi> (${x.v} % · <bdi>${x.l}</bdi>)</button>`).join('') : `Verset ${a}`)
+    + (m.short.length ? `<br>📏 Madd trop court (4 à 5 temps) : ${m.short.map((x) => maddHtml(x, 'pw')).join(' · ')}` : '');
   el.querySelectorAll('.pw').forEach((b) => b.addEventListener('click', () => playWord(+b.dataset.i)));
   el.hidden = false;
   clearTimeout(showAyahNote.t);
@@ -113,11 +138,36 @@ function pronAyahs() {
   return out;
 }
 
+// Bilan aḥkām : tous les madd devant une hamza trop courts du passage
+function maddAll() {
+  const seen = new Set(), out = { short: [], n: 0 };
+  for (const w of rec.words) {
+    const key = `${w.s}:${w.ayah}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const m = ayahMadd(w.s, w.ayah);
+    out.short.push(...m.short);
+    out.n += m.n;
+  }
+  return out;
+}
+
+function ahkamSummaryHtml() {
+  const m = maddAll();
+  if (!m.n) return '';
+  return `<div class="rv"><b>📏 Aḥkām (bêta) : madd devant une hamza</b><br>`
+    + `<small>${m.n - m.short.length} sur ${m.n} assez longs. Le madd muttaṣil (جَاءَ) et munfaṣil (فِي أَنْفُسِكُمْ) se tiennent 4 à 5 temps `
+    + '(Ḥafṣ, voie de la Shāṭibiyya) ; écoutez le récitateur (🔊) et allongez comme lui.</small>'
+    + m.short.map((x) => `<div class="rl"><button class="say-w" data-i="${x.i}" aria-label="Écouter">🔊</button>`
+      + `<span class="rw" dir="rtl">${rec.words[x.i].text}</span> <small>${QURAN[rec.words[x.i].s - 1].en} ${rec.words[x.i].ayah} · ${MADD_LABEL[x.typ]} : ${String(x.r).replace('.', ',')} temps</small></div>`).join('')
+    + '</div>';
+}
+
 function pronSummaryHtml() {
   const list = pronAyahs();
-  if (!list.length) return '';
+  if (!list.length) return ahkamSummaryHtml();
   const avg = Math.round(list.reduce((t, x) => t + x.note, 0) / list.length);
-  return `<div class="rv"><b>🎙 Prononciation comparée au récitateur : ${avg}/100</b><br>`
+  return ahkamSummaryHtml() + `<div class="rv"><b>🎙 Prononciation comparée au récitateur : ${avg}/100</b><br>`
     + '<small>100 = les lettres sont aussi nettes que chez le récitateur. Écoutez (🔊) les mots faibles et répétez-les.</small>'
     + list.map((x) => `<div class="rl"><span class="pron-badge ${pronClass(x.note)}">${x.note}</span> ${QURAN[x.s - 1].en} ${x.a}`
       + x.weak.map((y) => ` <button class="say-w" data-i="${y.i}" aria-label="Écouter">🔊</button><span class="rw" dir="rtl">${rec.words[y.i].text}</span> <small>(${y.v} % · <bdi>${y.l}</bdi>)</small>`).join('')
@@ -126,9 +176,16 @@ function pronSummaryHtml() {
 }
 
 function pronSummaryText() {
+  const m = maddAll();
   return pronAyahs().map((x) => `🎙 ${x.s}:${x.a} : ${x.note}/100`
-    + x.weak.map((y) => ` · ${rec.words[y.i].text} (${y.l} ${y.v}%)`).join(''));
+    + x.weak.map((y) => ` · ${rec.words[y.i].text} (${y.l} ${y.v}%)`).join(''))
+    .concat(m.n ? [`📏 madd devant hamza : ${m.n - m.short.length}/${m.n} assez longs`
+      + m.short.map((x) => ` · ${rec.words[x.i].text} (${x.typ} ${x.r})`).join('')] : []);
 }
+
+// réglage ⚙
+$('#ahkam').checked = rec.ahkam;
+$('#ahkam').addEventListener('change', () => { rec.ahkam = $('#ahkam').checked; store.set('ahkam', rec.ahkam); });
 
 // la barre suit la jauge du micro : cachée quand le micro s'arrête
 new MutationObserver(() => { if ($('#vu').hidden) $('#pron').hidden = true; })

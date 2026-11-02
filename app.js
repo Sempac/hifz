@@ -580,6 +580,7 @@ const rec = {
   beeps: store.get('beeps', 1),      // signaux (on reprend seul) avant le rappel prononcé
   // signal d'erreur : écran rouge + tic de 0,04 s (micro ouvert), écran rouge seul, ou bip ; l'ancien
   // défaut « flash » passe une fois au tic (écran seul jugé insuffisant, pas de vibration, 01/11/2026)
+  ahkam: store.get('ahkam', false), // 2.0 : remarques de tajwīd (longueur des madd), pron.js
   signal: (() => {
     if (!store.get('signalTick')) { store.set('signalTick', 1); if (store.get('signal') === 'flash') store.set('signal', 'tick'); }
     return store.get('signal', 'tick');
