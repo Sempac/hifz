@@ -13,6 +13,9 @@ const pad3 = (n) => String(n).padStart(3, '0');
 // et avec les variantes de lettres ramenées à une seule forme.
 function norm(w) {
   return w.normalize('NFC')
+    // écriture du mushaf : ى / و + alif suscrit au milieu du mot se lit ā (« التَّوْرَىٰةِ » = التوراة,
+    // « الزَّكَوٰةَ » = الزكاة) ; le modèle du serveur écrit ainsi (02/11/2026)
+    .replace(/[ىو]ٰ(?=\S*[ء-غف-ي])/g, 'ا')
     .replace(/[ؐ-ًؚ-ٰٟۖ-ۭـ]/g, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ى/g, 'ي')
@@ -1259,6 +1262,13 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
       continue;
     }
     if (isLearned(w, E[p].norm)) { advanceOk(st, p); continue; }
+    // ة à l'arrêt : elle se dit « h » léger, que le modèle n'écrit souvent pas (« التَّوْرَىٰ » pour
+    // « التَّوْرَاةُ » devant ۗ, refusé 3 fois le 02/11/2026) ; ى suscrit final = ā
+    if ((stops.has(i) || i === heard.length - 1) && /ة[^ء-ي]*$/.test(E[p].text) && w.replace(/ي$/, 'ا') === E[p].norm.slice(0, -1)) {
+      advanceOk(st, p);
+      if (alignPron?.[i]) st.pron[p] = alignPron[i];
+      continue;
+    }
     // un mot exact un peu plus loin passe avant un mot seulement ressemblant ici
     // (ex. « لم يولد » ne doit pas valider « يلد »)
     let exact = 0;
@@ -1294,6 +1304,8 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     }
     // liaison : « مِنَ اللَّهِ » entendu « مِنَلَّهِ », ou « اللَّهِ » entendu « لَّهِ »
     if (waslJoined(w, p)) { markOk(st, p); advanceOk(st, p + 1); continue; }
+    // reprise au mot d'avant, collé au mot attendu (« تُنَزَّلَلتَّوْرَىٰةِ » en revenant sur التوراة)
+    if (p > 0 && waslJoined(w, p - 1)) { advanceOk(st, p); continue; }
     if (waslAlone(w, p)) { advanceOk(st, p); continue; }
     if (tanwinNunAlone(w, p)) { advanceOk(st, p); continue; }
     // إدغام / إقلاب : « مِنْ رَبِّهِمْ » entendu « مِرَّبِّهِمْ », ou « مِنْ » entendu « مِ »
