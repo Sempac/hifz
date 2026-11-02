@@ -184,6 +184,12 @@ function pronSummaryText() {
 }
 
 // réglage ⚙
+// boutons ✓ / ✗ : cachés par défaut (02/11/2026) ; l'appui long sur un mot fait la même chose, et
+// valider un mot refusé apprend sa forme entendue (« سراط » serait ensuite accepté pour صراط)
+const showFabs = () => { $('#fab-group').hidden = !store.get('fabs', false); };
+$('#fabs').checked = store.get('fabs', false);
+$('#fabs').addEventListener('change', () => { store.set('fabs', $('#fabs').checked); showFabs(); });
+showFabs();
 $('#ahkam').checked = rec.ahkam;
 $('#ahkam').addEventListener('change', () => { rec.ahkam = $('#ahkam').checked; store.set('ahkam', rec.ahkam); });
 
