@@ -593,3 +593,9 @@ body {
 .summary .cmp { margin: 4px 0 10px; padding: 6px 8px; border-inline-start: 3px solid var(--muted); text-align: right; }
 .summary .cmp small { color: var(--muted); display: block; text-align: left; }
 .summary .cmp .ar { font-family: "Amiri Quran", serif; font-size: 1.2rem; line-height: 2; margin-bottom: 4px; }
+
+/* quart de hizb (en bas, à côté du numéro de page) et repère ۞ dans l'affichage texte */
+.c-rub { font-size: .9rem; }
+.cart.changed { animation: cart-flash 1.6s ease-out; }
+@keyframes cart-flash { 0%, 40% { background: var(--gold); color: var(--page); transform: scale(1.15); } 100% { transform: none; } }
+.rub-head { text-align: center; margin: 6px 0; font-size: .95rem; color: var(--gold); font-family: "Amiri Quran", serif; }

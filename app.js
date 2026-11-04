@@ -342,6 +342,8 @@ function openLearn() {
   for (const x of current.ayahs) {
     if (multi && x.s !== prevS) box.appendChild(surahHead(x.s));
     prevS = x.s;
+    const q = startsQuarter(x.s, x.a);
+    if (q) box.appendChild(quarterHead(q));
     const span = document.createElement('span');
     span.className = 'ayah';
     span.dataset.k = ayahKey(x);
@@ -352,6 +354,21 @@ function openLearn() {
   go('learn');
   applyLearnView();
 }
+
+// Apprendre, affichage texte : en faisant défiler, le cadre suit le verset au milieu de l'écran
+// (numéro de page et quart de hizb en bas)
+document.addEventListener('scroll', () => {
+  if (views.learn.hidden || learnView !== 'text') return;
+  cancelAnimationFrame(updateFrame.f);
+  updateFrame.f = requestAnimationFrame(() => {
+    const r = $('#learn-text').getBoundingClientRect(), y = Math.max(r.top, 0) + Math.min(r.height, innerHeight) / 2;
+    // (un peu plus bas ou plus haut si le milieu tombe sur un titre ou entre deux lignes)
+    const el = [0, 24, -24, 48, -48].map((dy) => document.elementFromPoint(r.left + r.width / 2, y + dy)?.closest('.ayah')).find(Boolean);
+    if (!el) return;
+    const [s, a] = el.dataset.k.split(':').map(Number);
+    if (QURAN[s - 1].p[a - 1] !== framePage.learn || QURAN[s - 1].q[a - 1] !== frameQuarter.learn) updateFrame('learn', QURAN[s - 1].p[a - 1], QURAN[s - 1].q[a - 1]);
+  });
+}, true);
 
 // ---------- Affichage en pages du mushaf (Apprendre) ----------
 let learnView = store.get('learnView', 'page'); // 'page' (mushaf) ou 'text' (texte continu)
@@ -691,6 +708,8 @@ function openRecite() {
   for (const x of current.ayahs) {
     if (multi && x.s !== prevS) box.appendChild(surahHead(x.s));
     prevS = x.s;
+    const q = startsQuarter(x.s, x.a);
+    if (q) box.appendChild(quarterHead(q));
     const n = x.a;
     let k = 0;
     for (const t of ayahText(x).split(/\s+/)) {
@@ -746,7 +765,11 @@ async function applyReciteView(startPage) {
   await document.fonts.ready;
   await nextFrame();
   const w0 = rec.words[Math.min(rec.shown.pos, rec.words.length - 1)];
-  mushaf.onFlip = (n) => { updateFrame('recite', n); setTimeout(() => updateLens(rec.lensTarget), 60); };
+  mushaf.onFlip = (n) => {
+    const w = rec.words[Math.min(rec.shown.pos, rec.words.length - 1)];
+    updateFrame('recite', n, w && QURAN[w.s - 1].p[w.ayah - 1] === n ? QURAN[w.s - 1].q[w.ayah - 1] : 0);
+    setTimeout(() => updateLens(rec.lensTarget), 60);
+  };
   await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1]);
   rec.glyph = rec.words.map((w) => {
     const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
@@ -870,17 +893,48 @@ const JUZ = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'ال
   'التاسع عشر', 'العشرون', 'الحادي والعشرون', 'الثاني والعشرون', 'الثالث والعشرون', 'الرابع والعشرون',
   'الخامس والعشرون', 'السادس والعشرون', 'السابع والعشرون', 'الثامن والعشرون', 'التاسع والعشرون', 'الثلاثون'];
 const framePage = { learn: 0, recite: 0 };
+const frameQuarter = { learn: 0, recite: 0 };
 
-async function updateFrame(name, page) {
+// Quart de hizb (1 à 240) en toutes lettres : « ۞ نصف الحزب ٥ »
+function quarterLabel(q) {
+  return `۞ ${['الحزب', 'ربع الحزب', 'نصف الحزب', 'ثلاثة أرباع الحزب'][(q - 1) % 4]} ${arNum(Math.ceil(q / 4))}`;
+}
+
+// Le verset ouvre-t-il un quart de hizb ? (pour le repère ۞ dans l'affichage texte)
+function startsQuarter(s, a) {
+  const q = QURAN[s - 1].q[a - 1];
+  const prev = a > 1 ? QURAN[s - 1].q[a - 2] : s > 1 ? QURAN[s - 2].q.at(-1) : 0;
+  return q !== prev ? q : 0;
+}
+
+// Repère de quart de hizb dans le texte continu, comme le ۞ des pages du mushaf (05/11/2026)
+function quarterHead(q) {
+  const div = document.createElement('div');
+  div.className = 'rub-head';
+  div.textContent = quarterLabel(q);
+  return div;
+}
+
+// page : page affichée ; q : quart de hizb du verset en cours (sinon celui du haut de la page).
+// En bas du cadre : numéro de page et quart de hizb, qui clignotent quand ils changent.
+async function updateFrame(name, page, q) {
   if (!page) return;
+  const turned = framePage[name] && framePage[name] !== page;
   framePage[name] = page;
   const view = views[name];
   const d = await mushafPageData(page);
   const w = d.w.find((x) => x[4] > 0) || d.w[0]; // premier mot de la page
   const s = w[2], a = w[3];
+  q ||= QURAN[s - 1].q[a - 1];
+  const newQ = frameQuarter[name] && frameQuarter[name] !== q;
+  frameQuarter[name] = q;
   view.querySelector('.c-surah').textContent = `سورة ${QURAN[s - 1].name}`;
   view.querySelector('.c-juz').textContent = `الجزء ${JUZ[Math.ceil(QURAN[s - 1].q[a - 1] / 8) - 1]}`;
   view.querySelector('.c-page').textContent = arNum(page);
+  view.querySelector('.c-rub').textContent = quarterLabel(q);
+  const flash = (el) => { el.classList.remove('changed'); void el.offsetWidth; el.classList.add('changed'); };
+  if (turned) flash(view.querySelector('.c-page'));
+  if (newQ) flash(view.querySelector('.c-rub'));
   const fav = view.querySelector('.fav-btn');
   fav.textContent = favs[page] ? '★' : '☆';
   fav.classList.toggle('on', !!favs[page]);
@@ -894,7 +948,7 @@ document.querySelectorAll('.fav-btn').forEach((b) => b.addEventListener('click',
   if (!p) return;
   if (favs[p]) delete favs[p]; else favs[p] = Date.now();
   store.set('favs', favs);
-  updateFrame(name, p);
+  updateFrame(name, p, frameQuarter[name]);
   renderFavs();
 }));
 
@@ -1228,7 +1282,7 @@ function checkVowels(st, j, heardRaw, pause = false) {
   if (vowelError(E[j].text, heardRaw, endOfAyah || pause)) { st.marks[j] = 'bad'; st.vow[j] = heardRaw; }
 }
 
-const BASMALA = ['بسم', 'الله', 'الرحمن', 'الرحيم'];
+const BASMALA_WORDS = ['بسم', 'الله', 'الرحمن', 'الرحيم'];
 
 // Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
 // stops : indices des mots entendus suivis d'une pause (voyelle finale non exigée).
@@ -1246,7 +1300,7 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     if (w.length <= 1 && E[p].norm.length > 1 && !nunAlone(w, p)) continue;
     // basmala récitée avant une sourate (absente du texte, sauf dans Al-Fatiha) : ignorée, ce ne sont
     // pas des mots en trop (« قُلْ » de 112:1 compté faux après la basmala, 31/10/2026)
-    if (E[p].ayah === 1 && E[p].k === 0 && w !== E[p].norm && BASMALA.some((b) => same(w, b))) continue;
+    if (E[p].ayah === 1 && E[p].k === 0 && w !== E[p].norm && BASMALA_WORDS.some((b) => same(w, b))) continue;
     // après un signal, on doit revenir au mot faux ; si l'on a continué plus loin (signal pas vu), ces
     // mots ne sont pas des fautes : ignorés en attendant le mot faux (sinon tout le reste passait en
     // rouge, de « النَّصْرُ » à la fin de la récitation, 01/11/2026). Un nouvel essai du mot (même
@@ -1445,11 +1499,12 @@ function render() {
     const cur = rec.spans[st.pos];
     if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
     rec.flagged.forEach((i) => rec.spans[i]?.classList.add('flag'));
-    // le cadre indique la page (sourate, juz) du mot attendu
-    const w = rec.words[Math.min(st.pos, rec.words.length - 1)];
-    const p = w && QURAN[w.s - 1].p[w.ayah - 1];
-    if (p && p !== framePage.recite) updateFrame('recite', p);
   }
+  // le cadre indique la page (sourate, juz) et le quart de hizb du mot attendu (en livre, la page
+  // est tournée par renderBook : seul le quart change ici)
+  const w = rec.words[Math.min(st.pos, rec.words.length - 1)];
+  const p = w && QURAN[w.s - 1].p[w.ayah - 1], q = w && QURAN[w.s - 1].q[w.ayah - 1];
+  if (p && (rec.book ? p === framePage.recite && q !== frameQuarter.recite : p !== framePage.recite || q !== frameQuarter.recite)) updateFrame('recite', p, q);
   const t = validateTarget();
   // « off » plutôt que disabled : un bouton désactivé ne reçoit plus le doigt pour être déplacé
   $('#fab-word').textContent = t >= 0 ? rec.words[t].text : '';
