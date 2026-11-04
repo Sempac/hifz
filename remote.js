@@ -250,7 +250,8 @@ class ServerRecognizer {
 // Rappel sur erreur : envoyé sur la connexion de la récitation (avant le « reset »), le serveur
 // l'écrit dans son journal avec le son reçu et la durée de ses analyses (diagnostic)
 function sendFault(info) {
-  if (conn.ws && conn.ws.readyState === 1) conn.ws.send(JSON.stringify({ type: 'fault', ...info }));
+  const v = ($('#app-version')?.textContent || '').replace(/\D/g, ''); // version réellement chargée
+  if (conn.ws && conn.ws.readyState === 1) conn.ws.send(JSON.stringify({ type: 'fault', v, ...info }));
 }
 
 // Bilan de fin de récitation, gardé par le serveur avec le diagnostic (connexion à part : celle de
