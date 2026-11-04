@@ -602,6 +602,7 @@ const rec = {
   retries: {},          // mot → nombre de reprises
   posAt: {},            // mot → moment où il a été reconnu (diagnostic des rappels)
   firstErr: {},         // mot → nature de l'erreur à la première reprise (bilan)
+  firstSaid: {},        // mot → ce qui a été dit à sa place à la première reprise (bilan : « vient de »)
   letterFaults: {},     // mot → { exp, got } : lettre attendue dite comme une autre (bilan, lettres à travailler)
   pausing: false,       // micro coupé le temps de faire entendre un mot
   committed: null,  // état validé (résultats finaux)
@@ -998,6 +999,7 @@ function resetRecite() {
   rec.reviewOut = null;
   rec.retries = {};
   rec.firstErr = {};
+  rec.firstSaid = {};
   rec.letterFaults = {};
   rec.posAt = {};
   rec.lastReplayAt = -1;
@@ -1845,14 +1847,17 @@ function replayAt(i, final = true) {
   // reprendre (après le mot précédent, sans dévoiler le mot attendu au premier bip)
   const prev = i > 0 && rec.words[i - 1].s === rec.words[i].s ? rec.words[i - 1].text : '';
   const where = prev ? [['après'], [prev, 'ok']] : [['au début du verset']];
+  // mots dits à la place (ou en trop) venant d'un autre verset : ce verset complet est montré
+  rec.firstSaid[i] ||= extraWord || otherWords || '';
+  const src = !vowelWord && (extraWord || otherWords) ? sourceNode(extraWord || otherWords, i) : null;
   const reason = otherWords
-    ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true]]
+    ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true], [src]]
     : [['⏭ Un mot a été sauté'], ...where, ['(rien n\'a été entendu à sa place).', '', true]];
   if (rec.retries[i] <= rec.beeps) {
     micLog(({ beep: 'bip', tick: 'éclair + tic' }[rec.signal] || 'éclair') + ' au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? `🔔 Mot en trop : « ${extraWord} »` : vowelWord ? '🔔 Prononciation. Reprenez ce mot.'
       : otherWords ? `🔔 Autre mot entendu : « ${otherWords} »` : '🔔 Mot sauté : reprenez à l\'endroit indiqué.';
-    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.']]
+    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.'], [src]]
       : vowelFix || [...reason, ['Reprenez à cet endroit.', '', true]]);
     if (rec.signal === 'beep') playBeep(after(200));
     else { flashSignal(); after(0)(); }
@@ -1860,12 +1865,67 @@ function replayAt(i, final = true) {
     micLog('prononciation du mot ' + (i + 1));
     rec.echo = rec.words[i].norm; // s'il est encore capté au début de la reprise : ignoré
     $('#heard').textContent = '🔊 Écoutez le mot';
-    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Le mot attendu :'], [word, 'ok']]
-      : vowelFix || (otherWords ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['au lieu de'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true]]
+    showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Le mot attendu :'], [word, 'ok'], [src]]
+      : vowelFix || (otherWords ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['au lieu de'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true], [src]]
         : [['⏭ Mot sauté :'], [word, 'ok'], ['Écoutez, puis reprenez ce mot.', '', true]]));
     sayWords([i], after(600));
   }
 }
+
+// Verset d'où viennent des mots dits à la place du bon (versets semblables : « يَفْعَلُ » pour « يَخْلُقُ »
+// en 3:47 vient de 3:40) : la plus longue suite de vrais mots du Coran, dans le verset le plus proche
+// (même sourate d'abord). null si rien de sûr (mot court seul, bruit). 05/11/2026
+let normAyahs = null;
+function sourceOf(said, w) {
+  const h = String(said || '').split(/\s+/).map(norm).filter(Boolean);
+  if (!h.length) return null;
+  normAyahs ||= QURAN.map((s) => s.a.map((a) => a.split(/\s+/).filter((t) => norm(t)).map((t) => ({ t, n: norm(t) }))));
+  for (let n = h.length; n >= 1; n--) {
+    for (let a = 0; a + n <= h.length; a++) {
+      const seq = h.slice(a, a + n);
+      if (n === 1 && seq[0].length < 3) continue;
+      let best = null;
+      normAyahs.forEach((ayahs, si) => ayahs.forEach((ws, ai) => {
+        for (let k = 0; k + n <= ws.length; k++) {
+          if (!seq.every((x, j) => ws[k + j].n === x)) continue;
+          const score = (si === w.s - 1 ? 0 : 10000) + Math.abs(ai + 1 - w.ayah);
+          if (!best || score < best.score) best = { score, s: si + 1, ayah: ai + 1, k, n };
+        }
+      }));
+      if (best) return best;
+    }
+  }
+  return null;
+}
+
+// Verset en texte, mots k..k+n-1 en évidence (classe hl)
+function ayahHtml(s, ayah, k, n, hl) {
+  return normAyahs[s - 1][ayah - 1].map(({ t }, j) => (j >= k && j < k + n ? `<span class="${hl}">${t}</span>` : t)).join(' ');
+}
+
+// Bilan, mot remplacé ou ajouté venant d'un autre verset : les deux versets complets l'un sous
+// l'autre, l'attendu (mot attendu en vert) et celui d'où vient ce qui a été dit (en rouge)
+function compareHtml(i, kind, heard) {
+  if (kind !== 'subst' && kind !== 'extra') return '';
+  const w = rec.words[i], said = heard || rec.firstSaid[i], src = said && sourceOf(said, w);
+  if (!src) return '';
+  return `<div class="cmp"><div><small>Attendu · ${QURAN[w.s - 1].en} ${w.ayah}</small>`
+    + `<div class="ar" dir="rtl">${ayahHtml(w.s, w.ayah, w.k, 1, 'exp')}</div></div>`
+    + `<div><small>Vous avez dit « ${escapeHtml(said)} » · vient de ${QURAN[src.s - 1].en} ${src.ayah}</small>`
+    + `<div class="ar" dir="rtl">${ayahHtml(src.s, src.ayah, src.k, src.n, 'said')}</div></div></div>`;
+}
+
+// Encadré « vient de » sous l'explication d'une erreur : le verset complet où se trouvent les mots dits
+function sourceNode(said, i) {
+  const src = sourceOf(said, rec.words[i]);
+  if (!src) return null;
+  const div = document.createElement('div');
+  div.className = 'fix-src';
+  div.innerHTML = `📖 « ${escapeHtml(said)} » vient de ${QURAN[src.s - 1].en} ${src.ayah} :`
+    + `<div class="ar" dir="rtl" lang="ar">${ayahHtml(src.s, src.ayah, src.k, src.n, 'said')}</div>`;
+  return div;
+}
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Lettre dite comme une autre (« سِرَاطٍ » pour « صِرَاطٍ ») : bouton pour répéter ce mot tout de suite,
 // comparé au récitateur, jusqu'à ce qu'il soit bon ; on revient ensuite au verset sur ce mot (02/11/2026)
@@ -1970,7 +2030,8 @@ function finish() {
     return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
       + `<span class="rw" dir="rtl">${w.text}</span> <small>${QURAN[w.s - 1].en} ${w.ayah}`
       + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
-      + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '') + '</small></div>';
+      + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '') + '</small></div>'
+      + compareHtml(i, kind, heard);
   };
   const group = (title, list, help, id) => (list.length
     ? `<div class="rv"><b>${title} : ${list.length}</b><br><small>${help}</small>${list.map(line).join('')}`

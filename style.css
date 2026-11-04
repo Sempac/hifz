@@ -584,3 +584,12 @@ body {
 }
 /* bouton « répéter ce mot » dans l'encadré d'erreur : seul élément cliquable du bandeau */
 #view-recite .fix .fix-drill { pointer-events: auto; margin-top: 6px; font-size: .95rem; }
+
+/* « vient de » : verset d'où viennent les mots dits à la place du bon (versets semblables) */
+#view-recite .fix .fix-src { font-size: .95rem; margin-top: 8px; }
+#view-recite .fix .fix-src .ar { font-size: 1.25rem; font-weight: 400; line-height: 2; }
+.ar .said, .cmp .said { color: var(--bad); font-weight: 700; }
+.cmp .exp { color: var(--ok); font-weight: 700; }
+.summary .cmp { margin: 4px 0 10px; padding: 6px 8px; border-inline-start: 3px solid var(--muted); text-align: right; }
+.summary .cmp small { color: var(--muted); display: block; text-align: left; }
+.summary .cmp .ar { font-family: "Amiri Quran", serif; font-size: 1.2rem; line-height: 2; margin-bottom: 4px; }
