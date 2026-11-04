@@ -600,6 +600,7 @@ const rec = {
   lastResultAt: 0,      // heure de la dernière réponse du micro
   noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
   retries: {},          // mot → nombre de reprises
+  posAt: {},            // mot → moment où il a été reconnu (diagnostic des rappels)
   firstErr: {},         // mot → nature de l'erreur à la première reprise (bilan)
   letterFaults: {},     // mot → { exp, got } : lettre attendue dite comme une autre (bilan, lettres à travailler)
   pausing: false,       // micro coupé le temps de faire entendre un mot
@@ -998,6 +999,7 @@ function resetRecite() {
   rec.retries = {};
   rec.firstErr = {};
   rec.letterFaults = {};
+  rec.posAt = {};
   rec.lastReplayAt = -1;
   rec.noReplay.clear();
   $('#summary').hidden = true;
@@ -1639,6 +1641,8 @@ function autoLearn(st) {
 
 function setShown(st, commit) {
   if (st.pos !== rec.shown.pos) rec.lastProgress = Date.now();
+  // moment où chaque mot a été reconnu la première fois (délai jusqu'au rappel, pour le diagnostic)
+  for (let p = 0; p < st.pos; p++) rec.posAt[p] ??= Date.now();
   rec.shown = st;
   if (commit) { rec.committed = st; autoLearn(st); }
   // le rappel passe avant la fin : une erreur sur le dernier mot doit aussi être reprise
@@ -1759,17 +1763,26 @@ function checkReplay(st, final) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
     if (!final && st.pos - 1 - i < REPLAY_CONFIRM) continue; // provisoire : pas encore assez sûr
-    replayAt(i);
+    replayAt(i, final);
     return true;
   }
   return false;
 }
 
-function replayAt(i) {
+function replayAt(i, final = true) {
   rec.lastReplayAt = i;
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
   rec.firstErr[i] ||= errorKind(rec.shown, i); // pour le bilan, même si le mot est retrouvé ensuite
+  // chaque rappel part dans le journal du serveur (diagnostic) : mot, raison, retard (04/11/2026)
+  if (rec.engine === 'server') {
+    const w = rec.words[i], s = rec.shown;
+    sendFault({
+      ref: `${w.s}:${w.ayah}`, word: w.text, kind: errorKind(s, i), heard: (s.heard[i] || []).join(' '),
+      vow: String(s.vow[i] || ''), ins: [].concat(s.ins[i] || []).join(' '), final, ahead: s.pos - 1 - i, level: rec.level,
+      retry: rec.retries[i], lag: rec.posAt[i] != null ? Date.now() - rec.posAt[i] : -1,
+    });
+  }
   const r = rec.recognition;
   rec.recognition = null;
   if (r) { try { r.abort(); } catch { /* déjà arrêté */ } }
@@ -1787,6 +1800,7 @@ function replayAt(i) {
   st.extra = 0;
   st.pending = [];
   for (const k of Object.keys(st.heard)) if (Number(k) >= i) delete st.heard[k];
+  for (const k of Object.keys(rec.posAt)) if (Number(k) >= i) delete rec.posAt[k];
   const extraWord = st.ins[i]; // rappel dû à un mot en trop ?
   const vowelWord = st.vow[i] || close; // … ou à une voyelle / lettre fausse ?
   if (vowelWord && !rec.letterFaults[i]) { const f = letterFault(rec.words[i].text, vowelWord); if (f) rec.letterFaults[i] = f; }
