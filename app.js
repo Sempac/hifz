@@ -1352,6 +1352,13 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // (plusieurs mots en trop d'affilée aussi : « بِاللَّهِ وَالْيَوْمِ الْآخِرِ وَلَوْ » pour « بِاللَّهِ وَلَوْ »,
     // s'ils sont tous de vrais mots et non des bouts de bruit)
     // un morceau d'un seul mot hors du Coran (« كبح » entre deux versets) est du bruit
+    // serveur, niveaux normal et souple : des mots en trop dont aucun n'est un mot du Coran (« فلعتق الري »,
+    // « نحليذ برنحهلياذ ») sont du bruit (télé, voix à côté) ou des mots collés mal compris, pas une
+    // erreur : 9 faux rappels sur 36 le 04/11/2026. Ignorés si le bon mot attendu suit.
+    if (server && rec.level >= 2 && !isQuranWord(w) && st.pending.every((x) => !isQuranWord(x)) && i + 1 < heard.length) {
+      const nx = heard[i + 1];
+      if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) { st.pending = []; st.extra = 0; continue; }
+    }
     const noise = stops.has(i) && (i === 0 || stops.has(i - 1)) && !isQuranWord(w);
     const before = st.pending.every((x) => x.length >= insMin) ? st.pending : null;
     if (insMin && !tail && !noise && w.length >= insMin && before && before.length + 1 < LEVELS[rec.level].extra && i + 1 < heard.length) {
@@ -1748,6 +1755,8 @@ function sayWords(idxs, done) {
 // définitif si l'erreur est déjà suivie de REPLAY_CONFIRM mots justes.
 const REPLAY_WINDOW = 6;
 const REPLAY_CONFIRM = 2;
+// serveur Hifz : texte provisoire fiable, 1 mot suffit (avec 2, l'arrêt venait 2 à 5 mots trop tard, 04/11/2026)
+const REPLAY_CONFIRM_SERVER = 1;
 
 // Après un rappel, pas de nouveau rappel avant REPLAY_SETTLE mots justes : le temps de se remettre
 // dans la récitation (les erreurs restent marquées, sans interrompre).
@@ -1762,7 +1771,7 @@ function checkReplay(st, final) {
   for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
-    if (!final && st.pos - 1 - i < REPLAY_CONFIRM) continue; // provisoire : pas encore assez sûr
+    if (!final && st.pos - 1 - i < (rec.engine === 'server' ? REPLAY_CONFIRM_SERVER : REPLAY_CONFIRM)) continue; // provisoire : pas encore assez sûr
     replayAt(i, final);
     return true;
   }
