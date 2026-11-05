@@ -1489,6 +1489,15 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // versets semblables) n'est pas une transcription approximative, la ressemblance ne suffit pas ;
     // et une lettre proche (« بِالسَّبْرِ » pour « بِالصَّبْرِ ») est une faute de prononciation
     const server = rec.engine === 'server';
+    // mot attendu coupé au mauvais endroit par le modèle (05/11/2026, 18:12 et 18:15) : « احز » + « بين »
+    // pour « الْحِزْبَيْنِ » (« بين », vrai mot du Coran, passait pour un mot en trop), ou la fin du mot
+    // collée au suivant : « لَوْ » + « لَيَأْتُونَ » pour « لَوْلَا يَأْتُونَ »
+    if (server && i + 1 < heard.length && p + 1 < N) {
+      const nx = heard[i + 1], ne = E[p + 1].norm, isNext = (x) => x === ne || same(x, ne);
+      if (!isNext(nx) && same(w + nx, E[p].norm) && lev(w + nx, E[p].norm) < lev(w, E[p].norm)) { advanceOk(st, p); i++; continue; }
+      const k = [1, 2].find((k) => nx.length > k + 1 && E[p].norm.length >= 3 && lev(w + nx.slice(0, k), E[p].norm) <= 1 && isNext(nx.slice(k)));
+      if (k) { markOk(st, p); advanceOk(st, p + 1); i++; continue; }
+    }
     // (sauf mot coupé par le serveur : « وان » + « تم » pour « وَأَنْتُمْ »)
     const cutWord = E[p].norm.startsWith(w) || w.startsWith(E[p].norm);
     if (!(server && !cutWord && isQuranWord(w) && lev(w, E[p].norm) >= 2) && same(w, E[p].norm)) {
