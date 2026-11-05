@@ -466,6 +466,11 @@ body {
 /* messages en français (état du serveur, mot validé…) : taille normale */
 #view-recite .talk .heard.latin { font-family: inherit; font-size: 1.1rem; line-height: 1.5; text-align: center; }
 #view-recite .talk .coach { align-self: center; }
+/* bilan à l'arrêt du micro : il prend tout le cadre du bas (le texte entendu et les messages s'effacent) */
+#view-recite .talk:has(> .summary:not([hidden])) > :not(.summary) { display: none; }
+#view-recite .talk .summary {
+  max-height: none; overflow: visible; padding: 0; border: 0; border-radius: 0; background: none; color: var(--page-ink);
+}
 /* jauge du micro et niveau de prononciation : à hauteur du livre */
 #view-recite .vu, #view-recite .pron { top: calc((100dvh - var(--talk-h)) / 2); height: calc((100dvh - var(--talk-h)) * .5); }
 

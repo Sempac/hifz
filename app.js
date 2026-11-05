@@ -2236,7 +2236,7 @@ function finish() {
     const w = rec.words[i];
     return `<div class="rl"><button class="say-w" data-i="${i}" aria-label="Écouter">🔊</button>`
       + `<span class="rw" dir="rtl">${w.text}</span> <small>${QURAN[w.s - 1].en} ${w.ayah}`
-      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
+      + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « <bdi dir="rtl">${heard}</bdi> »)` : '') + (why ? ` · ${why}` : '')
       + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '') + '</small></div>'
       + compareHtml(i, kind, heard);
   };
@@ -2245,10 +2245,14 @@ function finish() {
       + (id ? `<button id="${id}" class="btn primary">🎤 Réciter à nouveau ces versets</button>` : '') + '</div>'
     : '');
 
+  // dans l'ordre demandé (05/11/2026) : mots où l'on s'est trompé, puis mots oubliés, puis prononciation
+  const wrong = memory.filter((x) => x.kind === 'subst' || x.kind === 'extra');
+  const forgot = memory.filter((x) => !wrong.includes(x));
   $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} mot(s) juste(s) du premier coup`
     + (rec.reviewOut ? `<br>🎉 ${rec.reviewOut} mot(s) sorti(s) de « À revoir »` : '')
-    + group('🧠 Mémoire', memory, 'Mots oubliés, remplacés ou ajoutés : réciter ces versets encore.', 'btn-redo-memory')
-    + group('🗣 Prononciation', pron, 'Écoutez (🔊) puis répétez le mot.', 'btn-redo-pron')
+    + group('❌ Trompé', wrong, 'Un autre mot dit à la place, ou un mot en trop : réciter ces versets encore.', 'btn-redo-wrong')
+    + group('🕳 Oublié', forgot, 'Mots oubliés ou montrés après une hésitation : réciter ces versets encore.', 'btn-redo-forgot')
+    + group('🗣 Mal prononcé', pron, 'Écoutez (🔊) puis répétez le mot.', 'btn-redo-pron')
     + lettersHtml
     + pronSummaryHtml()
     + group('🎙 Mal entendus par le micro', misheard, 'Vous les avez touchés pour les valider : ils comptent justes.')
@@ -2258,6 +2262,7 @@ function finish() {
       : '');
   $('#summary').hidden = false;
   $('#fix').hidden = true;
+  $('#talk').scrollTop = 0;
   // le même bilan en texte, gardé par le serveur avec le diagnostic (plus besoin de capture d'écran)
   if (first && window.sendReport) {
     const txt = ({ i, kind, fixed, heard, why, shown }) => `${rec.words[i].text} (${rec.words[i].s}:${rec.words[i].ayah}, mot ${i + 1})`
@@ -2276,7 +2281,8 @@ function finish() {
     current = { title, ayahs: reviewAyahs(list.map(({ i }) => ({ s: rec.words[i].s, a: rec.words[i].ayah, k: rec.words[i].k }))) };
     openRecite();
   };
-  $('#btn-redo-memory')?.addEventListener('click', () => redo('Mémoire', memory));
+  $('#btn-redo-wrong')?.addEventListener('click', () => redo('Trompé', wrong));
+  $('#btn-redo-forgot')?.addEventListener('click', () => redo('Oublié', forgot));
   $('#btn-redo-pron')?.addEventListener('click', () => redo('Prononciation', pron));
   $('#btn-redo-letters')?.addEventListener('click', () => redo('Lettres', letterWords));
   // entraînement : d'abord les mots où la lettre a été manquée, puis d'autres mots du passage qui la contiennent
