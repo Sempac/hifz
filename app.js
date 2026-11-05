@@ -959,20 +959,21 @@ async function updateFrame(name, page, q) {
   frameQuarter[name] = q;
   view.querySelector('.c-surah').textContent = `سورة ${QURAN[s - 1].name}`;
   view.querySelector('.c-juz').textContent = `الجزء ${JUZ[Math.ceil(QURAN[s - 1].q[a - 1] / 8) - 1]}`;
-  view.querySelector('.c-page').textContent = arNum(page);
+  // étoile des favoris dans le cartouche du numéro de page (le coin sert à changer de mode)
+  const pg = view.querySelector('.c-page');
+  pg.textContent = `${favs[page] ? '★' : '☆'} ${arNum(page)}`;
+  pg.classList.toggle('fav-on', !!favs[page]);
   view.querySelector('.c-rub').textContent = quarterLabel(q);
   view.querySelectorAll('.cart').forEach(fitCart);
   const flash = (el) => { el.classList.remove('changed'); void el.offsetWidth; el.classList.add('changed'); };
-  if (turned) flash(view.querySelector('.c-page'));
+  if (turned) flash(pg);
   if (newQ) flash(view.querySelector('.c-rub'));
-  const fav = $(`#${name}-fav`); // dans ⚙ (le coin en bas à droite sert à changer de mode)
-  fav.textContent = favs[page] ? '★ Page favorite (retirer)' : '☆ Ajouter la page aux favoris';
-  fav.classList.toggle('on', !!favs[page]);
 }
 
 // ---------- Favoris : pages marquées d'une étoile ----------
+// toucher le cartouche du numéro de page (☆ ٥٠) ajoute ou retire la page affichée
 const favs = store.get('favs', {}); // { page: date d'ajout }
-document.querySelectorAll('.fav-btn').forEach((b) => b.addEventListener('click', () => {
+document.querySelectorAll('.c-page').forEach((b) => b.addEventListener('click', () => {
   const name = b.closest('#view-learn') ? 'learn' : 'recite';
   const p = framePage[name];
   if (!p) return;
