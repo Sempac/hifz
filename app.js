@@ -2231,7 +2231,7 @@ function onResult(e) {
     }
   }
   rec.heardCount = bestCount;
-  const tail = bestText.split(/\s+/).slice(-20).join(' '); // cadre du bas : plusieurs lignes en grand
+  const tail = bestText.split(/\s+/).slice(-5).join(' '); // cadre du bas : les 5 derniers mots, en grand (demande du 05/11/2026)
   // mots dits après le mot faux (signal pas suivi) : pas affichés en bas, ils dévoileraient la suite
   const waiting = best.back >= 0 && best.back === best.pos && best.ignored > 0;
   $('#heard').textContent = waiting ? '⏪ Revenez au mot faux.'
