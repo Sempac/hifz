@@ -325,10 +325,81 @@ $('#btn-recite').addEventListener('click', () => { readRange(); openRecite(); })
 const audio = new Audio();
 let playlist = [], playIdx = 0;
 
-$('#reciter').value = store.get('reciter', 'Husary_Muallim_128kbps');
+// Autres récitateurs d'everyayah.com (Hafs, en arabe ; une version par récitateur, la plus légère
+// de bonne qualité pour les réseaux faibles). Liste écrite ici : aucun chargement en plus (05/11/2026).
+const MORE_RECITERS = [
+  ['Abdul_Basit_Murattal_64kbps', 'Abdul Basit (Murattal)'], ['Abdul_Basit_Mujawwad_128kbps', 'Abdul Basit (Mujawwad)'],
+  ['AbdulSamad_64kbps_QuranExplorer.Com', 'Abdul Samad'], ['Abdullah_Basfar_64kbps', 'Abdullah Basfar'],
+  ['Abdullaah_3awwaad_Al-Juhaynee_128kbps', 'Abdullah Al-Juhani'], ['Abdullah_Matroud_128kbps', 'Abdullah Matroud'],
+  ['Abdurrahmaan_As-Sudais_64kbps', 'Abdurrahman As-Sudais'], ['Abu_Bakr_Ash-Shaatree_128kbps', 'Abu Bakr Ash-Shatri'],
+  ['ahmed_ibn_ali_al_ajamy_128kbps', 'Ahmed Al-Ajamy'], ['Ahmed_Neana_128kbps', 'Ahmed Neana'],
+  ['Akram_AlAlaqimy_128kbps', 'Akram Al-Alaqimy'], ['Ali_Hajjaj_AlSuesy_128kbps', 'Ali Hajjaj As-Suesy'],
+  ['Hudhaify_128kbps', 'Ali Al-Hudhaifi'], ['Ali_Jaber_64kbps', 'Ali Jaber'], ['Ayman_Sowaid_64kbps', 'Ayman Sowaid'],
+  ['aziz_alili_128kbps', 'Aziz Alili'], ['Fares_Abbad_64kbps', 'Fares Abbad'], ['Hani_Rifai_64kbps', 'Hani Ar-Rifai'],
+  ['Husary_128kbps_Mujawwad', 'Husary (Mujawwad)'], ['Ibrahim_Akhdar_32kbps', 'Ibrahim Al-Akhdar'],
+  ['Karim_Mansoori_40kbps', 'Karim Mansouri'], ['Khaalid_Abdullaah_al-Qahtaanee_192kbps', 'Khalid Al-Qahtani'],
+  ['khalefa_al_tunaiji_64kbps', 'Khalifa At-Tunaiji'], ['MaherAlMuaiqly128kbps', 'Maher Al-Muaiqly'],
+  ['mahmoud_ali_al_banna_32kbps', 'Mahmoud Ali Al-Banna'], ['Minshawy_Mujawwad_64kbps', 'Minshawi (Mujawwad)'],
+  ['Mohammad_al_Tablaway_128kbps', 'Mohammad At-Tablawi'], ['Muhammad_AbdulKareem_128kbps', 'Muhammad Abdulkareem'],
+  ['Muhammad_Ayyoub_128kbps', 'Muhammad Ayyoub'], ['Muhammad_Jibreel_128kbps', 'Muhammad Jibreel'],
+  ['Muhsin_Al_Qasim_192kbps', 'Muhsin Al-Qasim'], // (Mustafa Ismail retiré : versets manquants, ex. 3:13)
+  ['Nasser_Alqatami_128kbps', 'Nasser Al-Qatami'], ['Parhizgar_48kbps', 'Parhizgar'],
+  ['Ghamadi_40kbps', 'Saad Al-Ghamdi'], ['Sahl_Yassin_128kbps', 'Sahl Yassin'],
+  ['Salaah_AbdulRahman_Bukhatir_128kbps', 'Salah Bukhatir'], ['Salah_Al_Budair_128kbps', 'Salah Al-Budair'],
+  ['Saood_ash-Shuraym_128kbps', 'Saud Ash-Shuraym'], ['Yaser_Salamah_128kbps', 'Yaser Salamah'],
+  ['Yasser_Ad-Dussary_128kbps', 'Yasser Ad-Dussary'],
+];
+
+// Récitateur choisi dans « Autres » : ajouté à la liste courte (avant « 🔍 Autres récitateurs… »)
+function ensureReciterOption(value) {
+  const sel = $('#reciter');
+  if ([...sel.options].some((o) => o.value === value)) return;
+  const r = MORE_RECITERS.find(([v]) => v === value);
+  if (!r) return;
+  sel.insertBefore(new Option(r[1], r[0]), sel.querySelector('option[value="__more"]'));
+}
+
+let reciterBefore = store.get('reciter', 'Husary_Muallim_128kbps');
+ensureReciterOption(reciterBefore);
+$('#reciter').value = reciterBefore;
 $('#repeat').value = store.get('repeat', '3');
-$('#reciter').addEventListener('change', () => store.set('reciter', $('#reciter').value));
+$('#reciter').addEventListener('change', () => {
+  const v = $('#reciter').value;
+  if (v === '__more') { openReciterSheet(); return; }
+  reciterBefore = v;
+  store.set('reciter', v);
+});
 $('#repeat').addEventListener('change', () => store.set('repeat', $('#repeat').value));
+
+// s'ouvre par-dessus les réglages d'Apprendre : placé en fin de page
+document.body.append($('#reciter-sheet'));
+function openReciterSheet() {
+  $('#reciter-search').value = '';
+  renderReciters();
+  $('#reciter-sheet').hidden = false;
+}
+function renderReciters() {
+  const q = $('#reciter-search').value.trim().toLowerCase();
+  const ul = $('#reciter-list');
+  ul.innerHTML = '';
+  for (const [v, name] of MORE_RECITERS) {
+    if (q && !name.toLowerCase().includes(q)) continue;
+    const b = document.createElement('button');
+    b.className = 'btn' + (v === reciterBefore ? ' on' : '');
+    b.textContent = name;
+    b.addEventListener('click', () => {
+      ensureReciterOption(v);
+      $('#reciter').value = reciterBefore = v;
+      store.set('reciter', v);
+      $('#reciter-sheet').hidden = true;
+    });
+    ul.appendChild(b);
+  }
+}
+$('#reciter-search').addEventListener('input', renderReciters);
+// fermé sans choisir : on revient au récitateur d'avant (pas « Autres… » dans la liste)
+new MutationObserver(() => { if ($('#reciter-sheet').hidden && $('#reciter').value === '__more') $('#reciter').value = reciterBefore; })
+  .observe($('#reciter-sheet'), { attributes: true, attributeFilter: ['hidden'] });
 
 // La sélection couvre-t-elle plusieurs sourates ? (on affiche alors le nom de chaque sourate)
 const multiSurah = () => current.ayahs.some((x) => x.s !== current.ayahs[0].s);

@@ -322,6 +322,11 @@ body {
 .sheet .fav-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: start; }
 .fav-item bdi { font-family: "Amiri Quran", serif; font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fav-item.on { color: #c8962a; font-weight: 600; }
+/* liste des autres récitateurs */
+#reciter-search { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 1rem; background: var(--surface); color: var(--text); }
+.reciter-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.reciter-list .btn { width: 100%; text-align: start; }
+.reciter-list .btn.on { color: #c8962a; font-weight: 600; }
 .corner.mic { width: 50px; height: 50px; font-size: 1.4rem; background: var(--frame); border: 2px solid var(--gold); }
 .corner.mic.on { background: var(--bad); animation: pulse 1.4s infinite; }
 .framed .rec-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; }
