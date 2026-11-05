@@ -265,8 +265,7 @@ body {
   padding: env(safe-area-inset-top) 6px env(safe-area-inset-bottom);
 }
 .fhead, .ffoot { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; }
-.fhead { height: 46px; padding: 0 48px; }
-.ffoot { height: 42px; }
+.fhead, .ffoot { height: 56px; padding: 0 60px; }
 .cart {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 70px; max-width: 48%; height: 34px; padding: 0 12px; overflow: hidden; white-space: nowrap;
@@ -305,8 +304,8 @@ body {
 
 /* boutons ronds dans les coins, posés sur le cadre */
 .corner {
-  position: absolute; z-index: 6; width: 40px; height: 40px; border-radius: 50%; padding: 0;
-  display: grid; place-items: center; font-size: 1.15rem; line-height: 1; cursor: pointer;
+  position: absolute; z-index: 6; width: 50px; height: 50px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; font-size: 1.5rem; line-height: 1; cursor: pointer;
   background: var(--frame); color: #fff; border: 2px solid var(--gold);
   box-shadow: 0 2px 6px rgb(0 0 0 / .35);
 }
@@ -316,7 +315,7 @@ body {
 .corner.br { bottom: calc(env(safe-area-inset-bottom) + 1px); right: 6px; }
 .view.framed { position: relative; }
 .corner.fav-btn.on { color: #f4c542; }
-.corner.mic { width: 40px; height: 40px; font-size: 1.1rem; background: var(--frame); border: 2px solid var(--gold); }
+.corner.mic { width: 50px; height: 50px; font-size: 1.4rem; background: var(--frame); border: 2px solid var(--gold); }
 .corner.mic.on { background: var(--bad); animation: pulse 1.4s infinite; }
 .framed .rec-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; }
 
@@ -597,7 +596,7 @@ body {
 .summary .cmp .ar { font-family: "Amiri Quran", serif; font-size: 1.2rem; line-height: 2; margin-bottom: 4px; }
 
 /* quart de hizb (en bas, à côté du numéro de page) et repère ۞ dans l'affichage texte */
-.c-rub { font-size: 1.1rem; }
+.c-rub { font-size: 1.1rem; max-width: 72%; }
 .cart.changed { animation: cart-flash 1.6s ease-out; }
 @keyframes cart-flash { 0%, 40% { background: var(--gold); color: var(--page); transform: scale(1.15); } 100% { transform: none; } }
 .rub-head { text-align: center; margin: 6px 0; font-size: .95rem; color: var(--gold); font-family: "Amiri Quran", serif; }
