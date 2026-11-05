@@ -158,6 +158,18 @@ const ayahText = (x) => QURAN[x.s - 1].a[x.a - 1];
 // Tous les mots du Coran (normalisés), construits au premier besoin
 let quranVocab = null;
 const isQuranWord = (w) => (quranVocab ||= new Set(QURAN.flatMap((s) => s.a.flatMap((a) => a.split(/\s+/).map(norm))))).has(w);
+// presque un mot du Coran (une lettre de différence, 4 lettres ou plus) : « الرِّزْقِا » collé, pas du bruit
+let quranByLen = null;
+const nearMemo = new Map();
+function nearQuranWord(w) {
+  if (w.length < 4) return false;
+  if (nearMemo.has(w)) return nearMemo.get(w);
+  if (!quranByLen) { quranByLen = {}; isQuranWord(''); for (const q of quranVocab) (quranByLen[q.length] ||= []).push(q); }
+  let near = false;
+  for (let L = w.length - 1; L <= w.length + 1 && !near; L++) for (const q of quranByLen[L] || []) if (lev(w, q) <= 1) { near = true; break; }
+  nearMemo.set(w, near);
+  return near;
+}
 
 // Position de chaque mot dans l'audio mot par mot de Quran.com, pour les versets
 // où son découpage diffère du nôtre : { "sourate:verset": [positions] }
@@ -1505,7 +1517,10 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // collée au suivant : « لَوْ » + « لَيَأْتُونَ » pour « لَوْلَا يَأْتُونَ »
     if (server && i + 1 < heard.length && p + 1 < N) {
       const nx = heard[i + 1], ne = E[p + 1].norm, isNext = (x) => x === ne || same(x, ne);
-      if (!isNext(nx) && same(w + nx, E[p].norm) && lev(w + nx, E[p].norm) < lev(w, E[p].norm)) { advanceOk(st, p); i++; continue; }
+      // (pas deux mots qui sont exactement des mots qui suivent : « لَمْ تُنْذِرْهُمْ » n'est pas un
+      // « أَأَنْذَرْتَهُمْ » coupé, c'est ce mot oublié, test du 05/11/2026)
+      const ahead = (x) => E.slice(p + 1, p + 5).some((e) => e.norm === x);
+      if (!isNext(nx) && !ahead(w) && !ahead(nx) && same(w + nx, E[p].norm) && lev(w + nx, E[p].norm) < lev(w, E[p].norm)) { advanceOk(st, p); i++; continue; }
       const k = [1, 2].find((k) => nx.length > k + 1 && E[p].norm.length >= 3 && lev(w + nx.slice(0, k), E[p].norm) <= 1 && isNext(nx.slice(k)));
       if (k) { markOk(st, p); advanceOk(st, p + 1); i++; continue; }
     }
@@ -1581,7 +1596,8 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     // serveur, niveaux normal et souple : des mots en trop dont aucun n'est un mot du Coran (« فلعتق الري »,
     // « نحليذ برنحهلياذ ») sont du bruit (télé, voix à côté) ou des mots collés mal compris, pas une
     // erreur : 9 faux rappels sur 36 le 04/11/2026. Ignorés si le bon mot attendu suit.
-    if (server && rec.level >= 2 && !isQuranWord(w) && st.pending.every((x) => !isQuranWord(x)) && i + 1 < heard.length) {
+    // (sauf un mot à une lettre près d'un mot du Coran : un vrai mot en trop collé ou mal coupé, test du 05/11/2026)
+    if (server && rec.level >= 2 && !isQuranWord(w) && !nearQuranWord(w) && st.pending.every((x) => !isQuranWord(x)) && i + 1 < heard.length) {
       const nx = heard[i + 1];
       if (nx === E[p].norm || isLearned(nx, E[p].norm) || same(nx, E[p].norm)) { st.pending = []; st.extra = 0; continue; }
     }
