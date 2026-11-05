@@ -560,12 +560,24 @@ const audioCtx = () => (player.ctx ||= new (window.AudioContext || window.webkit
 // lu d'une traite, le fichier du verset 3 s'arrête au milieu du « نَ »). Pour ces récitateurs, Quran.com
 // fournit la sourate entière en un fichier + l'heure de début et de fin de chaque verset : on lit ce
 // fichier en continu, sans aucune coupure, et on ne saute qu'à une répétition ou à la fin de la sélection.
-// Valeur du choix « récitateur » (dossier everyayah) → numéro de récitation Quran.com
+// Valeur du choix « récitateur » (dossier everyayah) → numéro de récitation Quran.com (nombre), ou
+// [numéro de lecture, dossier] sur mp3quran.net (v80 : même principe, autres récitateurs, Hafs seulement)
 const SURAH_AUDIO = {
   Husary_Muallim_128kbps: 12, Husary_128kbps: 6, Minshawy_Murattal_128kbps: 9, Alafasy_128kbps: 7,
   Abdul_Basit_Murattal_64kbps: 2, Abdul_Basit_Mujawwad_128kbps: 1, 'Abdurrahmaan_As-Sudais_64kbps': 3,
   'Abu_Bakr_Ash-Shaatree_128kbps': 4, Hani_Rifai_64kbps: 5, 'Saood_ash-Shuraym_128kbps': 10,
   khalefa_al_tunaiji_64kbps: 161, 'Yasser_Ad-Dussary_128kbps': 97,
+  Ghamadi_40kbps: [30, 'saad-ghamdi/r1'], Abdullah_Basfar_64kbps: [60, 'abdullah-basfar/r1'],
+  'Abdullaah_3awwaad_Al-Juhaynee_128kbps': [62, 'abdullah-juhani/r1'], Abdullah_Matroud_128kbps: [59, 'abdullah-matrood/r1'],
+  ahmed_ibn_ali_al_ajamy_128kbps: [5, 'ahmad-ajmi/r1'], Ahmed_Neana_128kbps: [9, 'ahmad-naina/r1'],
+  Akram_AlAlaqimy_128kbps: [10, 'akram-alaqmi/r1'], Ali_Hajjaj_AlSuesy_128kbps: [77, 'ali-souissi/r1'],
+  Hudhaify_128kbps: [74, 'ali-hudhaifi/r1'], Ali_Jaber_64kbps: [76, 'ali-jaber/r1'], Fares_Abbad_64kbps: [81, 'fares-abbad/r1'],
+  Husary_128kbps_Mujawwad: [119, 'mahmoud-husary/r2'], Ibrahim_Akhdar_32kbps: [1, 'ibrahim-akhdar/r1'],
+  'Khaalid_Abdullaah_al-Qahtaanee_192kbps': [21, 'khalid-qahtani/r1'], Mohammad_al_Tablaway_128kbps: [106, 'muhammad-tablawi/r1'],
+  Muhammad_AbdulKareem_128kbps: [115, 'muhammad-abdulkareem/r1'], Muhammad_Ayyoub_128kbps: [109, 'muhammad-ayyub/r1'],
+  Muhsin_Al_Qasim_192kbps: [67, 'abdulmohsen-qasim/r1'], Nasser_Alqatami_128kbps: [86, 'nasser-qatami/r1'],
+  Sahl_Yassin_128kbps: [32, 'sahl-yassin/r1'], Salaah_AbdulRahman_Bukhatir_128kbps: [46, 'salah-bukhatir/r1'],
+  Salah_Al_Budair_128kbps: [43, 'salah-budair/r1'],
 };
 const surahEl = new Audio(); // lecteur du fichier de la sourate (continue aussi écran éteint)
 surahEl.preload = 'auto';
@@ -573,6 +585,19 @@ const surahTimingCache = new Map();
 // { url, at: { verset: [début, fin] (s) } } d'une sourate pour une récitation Quran.com
 function surahTimings(id, s) {
   const key = `${id}:${s}`;
+  if (!surahTimingCache.has(key) && Array.isArray(id)) {
+    // mp3quran.net : [{ ayah, start_time, end_time }] en ms (ayah 0 = isti'adha/basmala, ignorée)
+    const p = fetch(`https://www.mp3quran.net/api/v3/ayat_timing?surah=${s}&read=${id[0]}`)
+      .then((r) => { if (!r.ok) throw new Error(`minutage ${r.status}`); return r.json(); })
+      .then((list) => {
+        const at = {};
+        for (const v of list) if (v.ayah > 0) at[v.ayah] = [v.start_time / 1000, v.end_time / 1000];
+        if (!Object.keys(at).length) throw new Error('minutage vide');
+        return { url: `https://cdn.mp3quran.net/audio/${id[1]}/${pad3(s)}.mp3`, at };
+      });
+    p.catch(() => surahTimingCache.delete(key));
+    surahTimingCache.set(key, p);
+  }
   if (!surahTimingCache.has(key)) {
     const p = fetch(`https://api.qurancdn.com/api/qdc/audio/reciters/${id}/audio_files?chapter=${s}&segments=true`)
       .then((r) => { if (!r.ok) throw new Error(`minutage ${r.status}`); return r.json(); })
