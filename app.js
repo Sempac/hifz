@@ -1384,6 +1384,13 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
     for (let k = 1; k <= 3 && p + k < N; k++) {
       if (E[p + k].norm.length >= 3 && same(w, E[p + k].norm)) { skip = k; break; }
     }
+    // « وَاللَّهُ » pour « فَإِنَّ اللَّهَ » (3:32, 05/11/2026) : le و / ف collé au mot suivant a pris la place
+    // du mot sauté ; c'est un mot remplacé (erreur de mémoire), pas un mot que le micro n'a pas capté
+    if (skip === 1 && server && /^[وف]/.test(w) && w.slice(1) === E[p + 1].norm && !E[p + 1].norm.startsWith(w[0])) {
+      st.marks[p] = 'bad'; st.heard[p] = [w]; st.extra = 0; st.pending = []; st.grace = 0;
+      advanceOk(st, p + 1);
+      continue;
+    }
     if (skip) { skipped(st, p, skip); advanceOk(st, p + skip); continue; }
     // l'utilisateur répète des mots déjà récités (par exemple il reprend le verset) : on les ignore
     let repeated = false;
@@ -1824,10 +1831,13 @@ const repriseMax = () => Math.max(2, rec.beeps + 1);
 
 function checkReplay(st, final) {
   if (!rec.replay || !rec.listening || rec.pausing) return false;
-  if (rec.lastReplayAt >= 0 && st.pos < rec.lastReplayAt + REPLAY_SETTLE) return false;
+  // juste après un rappel, seuls les mots faux interrompent (un mot faux à la reprise, « وَاللَّهُ » pour
+  // « فَإِنَّ اللَّهَ », passait sans rien dire, 05/11/2026) ; un mot « non entendu » attend REPLAY_SETTLE mots
+  const settling = rec.lastReplayAt >= 0 && st.pos < rec.lastReplayAt + REPLAY_SETTLE;
   for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
+    if (settling && (m !== 'bad' || i < rec.lastReplayAt)) continue;
     if (!final && st.pos - 1 - i < (rec.engine === 'server' ? REPLAY_CONFIRM_SERVER : REPLAY_CONFIRM)) continue; // provisoire : pas encore assez sûr
     replayAt(i, final);
     return true;
