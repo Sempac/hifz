@@ -2953,3 +2953,24 @@ loadData();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js');
 }
+
+// Mise à jour automatique (06/11/2026) : le téléphone garde la page ouverte en arrière-plan, et
+// rouvrir l'application la reprend telle quelle (l'utilisateur restait en v75 alors que v77 était en
+// ligne). À l'ouverture et à chaque retour dans l'application, on compare le numéro de version en
+// ligne ; s'il a changé, la page est rechargée (sauf pendant une récitation ou une écoute).
+const appVersion = () => ($('#app-version').textContent.match(/\d+/) || [''])[0];
+$('#learn-version').textContent = $('#app-version').textContent;
+async function checkUpdate() {
+  if (location.protocol === 'file:' || rec.listening || rec.booting || playlist.length) return;
+  try {
+    const html = await (await fetch(`index.html?v=${Date.now()}`, { cache: 'no-store' })).text();
+    const online = (html.match(/id="app-version">Version (\d+)/) || [])[1];
+    // (une seule tentative par version : pas de boucle si le site sert encore l'ancienne page)
+    if (online && online !== appVersion() && sessionStorage.getItem('reloadedFor') !== online) {
+      sessionStorage.setItem('reloadedFor', online);
+      location.reload();
+    }
+  } catch { /* hors ligne : on garde la version en cache */ }
+}
+setTimeout(checkUpdate, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
