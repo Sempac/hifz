@@ -51,6 +51,19 @@ async function ensureMic() {
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
 }
 
+// Son du signal d'erreur (bip de montre, tic) capté par le micro : remplacé par du silence dans ce qui
+// part au serveur, pour qu'il n'en fasse pas de lettres (05/11/2026). Chaque morceau de 200 ms
+// arrive à sa fin : ses échantillons couvrent [arrivée − 200 ms, arrivée].
+const muteWin = { from: 0, to: 0 };
+window.micMute = (from, to) => { muteWin.from = from; muteWin.to = to; };
+function muted(buf) {
+  const end = Date.now(), start = end - buf.length / 16;
+  if (muteWin.to <= start || muteWin.from >= end) return buf;
+  const a = Math.max(0, Math.floor((muteWin.from - start) * 16)), b = Math.min(buf.length, Math.ceil((muteWin.to - start) * 16));
+  buf.fill(0, a, b);
+  return buf;
+}
+
 function releaseMic() {
   mic.sink = null;
   if (mic.stream) mic.stream.getTracks().forEach((t) => t.stop());
@@ -212,7 +225,7 @@ class ServerRecognizer {
     }
     ws.send(JSON.stringify({ type: 'reset', sid: this.sid })); // repartir de zéro
     conn.listener = this;
-    mic.sink = (buf) => { if (ws.readyState === 1) ws.send(buf.buffer); };
+    mic.sink = (buf) => { if (ws.readyState === 1) ws.send(muted(buf).buffer); };
     if (this.onstart) this.onstart();
     if (this.onaudiostart) this.onaudiostart();
   }

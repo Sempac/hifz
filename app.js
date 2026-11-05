@@ -710,9 +710,11 @@ const rec = {
   // signal d'erreur : écran rouge + tic de 0,04 s (micro ouvert), écran rouge seul, ou bip ; l'ancien
   // défaut « flash » passe une fois au tic (écran seul jugé insuffisant, pas de vibration, 01/11/2026)
   ahkam: store.get('ahkam', false), // 2.0 : remarques de tajwīd (longueur des madd), pron.js
+  // 05/11/2026 : « tic » et bip remplacés une fois par le bip de montre (plus court, plus aigu, retiré du son envoyé)
   signal: (() => {
     if (!store.get('signalTick')) { store.set('signalTick', 1); if (store.get('signal') === 'flash') store.set('signal', 'tick'); }
-    return store.get('signal', 'tick');
+    if (!store.get('signalWatch')) { store.set('signalWatch', 1); if (['tick', 'beep'].includes(store.get('signal', 'tick'))) store.set('signal', 'watch'); }
+    return store.get('signal', 'watch');
   })(),
   waqf: store.get('waqf', 'rec'),    // signes d'arrêt (WAQF_SHOWN)
   // écoute par phrase (au lieu de continue) : par défaut sur iPhone / iPad, où Safari suit mieux ainsi
@@ -2078,19 +2080,46 @@ const TICK = (() => {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 })();
 
+// Bip de montre électronique (05/11/2026) : deux « bip » de 25 ms à 4 kHz, 45 ms d'écart (0,1 s en
+// tout). Plus aigu que la voix (le modèle n'y entend pas de lettre) et très bref ; en plus, ce moment
+// est remplacé par du silence dans le son envoyé au serveur (micMute, remote.js).
+const WATCH_MS = 95;
+const WATCH = (() => {
+  const rate = 44100, n = Math.round(rate * WATCH_MS / 1000), buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, s) => [...s].forEach((c, k) => buf.setUint8(o + k, c.charCodeAt(0)));
+  str(0, 'RIFF'); buf.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true); buf.setUint16(22, 1, true); buf.setUint32(24, rate, true);
+  buf.setUint32(28, rate * 2, true); buf.setUint16(32, 2, true); buf.setUint16(34, 16, true);
+  str(36, 'data'); buf.setUint32(40, n * 2, true);
+  const on = (t) => (t < 0.025 ? t : t >= 0.07 ? t - 0.07 : -1); // temps dans un des deux bips, sinon -1
+  for (let k = 0; k < n; k++) {
+    const t = k / rate, u = on(t);
+    if (u < 0 || u >= 0.025) continue;
+    const fade = Math.min(1, u / 0.002, (0.025 - u) / 0.002);
+    // onde presque carrée (son « électronique » des montres), adoucie pour ne pas saturer
+    const s = Math.sin(2 * Math.PI * 4000 * t), sq = Math.sign(s) * Math.min(1, Math.abs(s) * 3);
+    buf.setInt16(44 + k * 2, sq * 7000 * fade, true);
+  }
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+})();
+
 // Signal sans coupure du micro : écran rouge qui clignote 2 fois + vibration (Android, mais le S21 ne
-// vibre pas pendant que le micro écoute, 01/11/2026) + « tic » si choisi. On redit le mot dès le
-// signal, alors qu'avec le bip le début du mot, dit pendant le bip, était perdu (01/11/2026).
+// vibre pas pendant que le micro écoute, 01/11/2026) + bip de montre ou « tic » si choisi. On redit le
+// mot dès le signal, alors qu'avec le bip le début du mot, dit pendant le bip, était perdu (01/11/2026).
 function flashSignal() {
   const v = views.recite;
   v.classList.remove('flash');
   void v.offsetWidth; // relance l'animation
   v.classList.add('flash');
   try { navigator.vibrate?.([120, 80, 120]); } catch { /* pas de vibreur */ }
-  if (rec.signal === 'tick' && !sayAudio) {
+  const sound = { tick: [TICK, 40], watch: [WATCH, WATCH_MS] }[rec.signal];
+  if (sound && !sayAudio) {
     sayEl.onended = sayEl.onerror = null;
-    sayEl.src = TICK;
-    sayEl.play().catch(() => { /* son bloqué */ });
+    sayEl.src = sound[0];
+    // le son du signal capté par le micro n'est pas envoyé au serveur (silence à la place)
+    // (+ 300 ms : retard du haut-parleur et du micro sur Android ; on met plus de temps à reprendre le mot)
+    sayEl.onplaying = () => { sayEl.onplaying = null; window.micMute?.(Date.now() - 30, Date.now() + sound[1] + 300); };
+    sayEl.play().catch(() => { sayEl.onplaying = null; });
   }
 }
 
@@ -2236,7 +2265,7 @@ function replayAt(i, final = true) {
     ? [['🔁 Vous avez dit'], [otherWords, 'bad'], ['mais ce n\'est pas le mot qui vient'], ...where, ['(mot ajouté ou remplacé).', '', true], [src]]
     : [['⏭ Un mot a été sauté'], ...where, ['(rien n\'a été entendu à sa place).', '', true]];
   if (rec.retries[i] <= rec.beeps) {
-    micLog(({ beep: 'bip', tick: 'éclair + tic' }[rec.signal] || 'éclair') + ' au mot ' + (i + 1));
+    micLog(({ beep: 'bip', tick: 'éclair + tic', watch: 'éclair + bip de montre' }[rec.signal] || 'éclair') + ' au mot ' + (i + 1));
     $('#heard').textContent = extraWord ? `🔔 Mot en trop : « ${extraWord} »` : vowelWord ? '🔔 Prononciation. Reprenez ce mot.'
       : otherWords ? `🔔 Autre mot entendu : « ${otherWords} »` : '🔔 Mot sauté : reprenez à l\'endroit indiqué.';
     showFix(extraWord ? [['➕ Mot en trop :'], [extraWord, 'bad'], ['ajouté à tort. Reprenez sans lui.'], [src]]
