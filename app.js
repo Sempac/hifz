@@ -353,7 +353,6 @@ $('#btn-learn').addEventListener('click', () => { readRange(); openLearn(); });
 $('#btn-recite').addEventListener('click', () => { readRange(); openRecite(); });
 
 // ---------- Écran 2 : apprendre ----------
-const audio = new Audio();
 let playlist = [], playIdx = 0;
 
 // Autres récitateurs d'everyayah.com (Hafs, en arabe ; une version par récitateur, la plus légère
@@ -546,47 +545,116 @@ $('#learn-book').addEventListener('click', (e) => {
   if (x) play([x]);
 });
 
+// Lecture continue (06/11/2026, demande utilisateur : « on sent une coupure entre les versets ») :
+// un fichier par verset, mais le suivant est téléchargé et décodé pendant la lecture du verset en
+// cours, puis enchaîné à l'échantillon près (Web Audio). Les silences des fichiers sont très
+// inégaux (Husary : 0,6 s au début + 1,5 s à la fin ; Afasy, Soudais : rien, coupé net) : ils sont
+// retirés et remplacés par une même respiration de VERSE_GAP entre deux versets.
+const VERSE_GAP = 0.6;    // pause entre deux versets (s)
+const AUDIO_AHEAD = 2;    // le verset suivant est programmé 2 s avant la fin du verset en cours
+const player = { ctx: null, gen: 0, sources: [], cache: new Map() };
+const audioCtx = () => (player.ctx ||= new (window.AudioContext || window.webkitAudioContext)());
+
+// Son d'un verset : { buf, from, to } (début et fin de la voix, en s) ; null si pas d'enregistrement
+function loadAyahAudio(x, reciter) {
+  const key = `${reciter}|${ayahKey(x)}`;
+  if (!player.cache.has(key)) {
+    const p = (async () => {
+      let data;
+      if (reciter === 'me') {
+        const saved = await idbGet(ayahKey(x));
+        if (!saved) return null;
+        data = saved.buf.slice(0);
+      } else {
+        const r = await fetch(`https://everyayah.com/data/${reciter}/${pad3(x.s)}${pad3(x.a)}.mp3`);
+        if (!r.ok) throw new Error(`audio ${r.status}`);
+        data = await r.arrayBuffer();
+      }
+      const buf = await new Promise((ok, ko) => audioCtx().decodeAudioData(data, ok, ko));
+      // voix = trames de 20 ms à moins de 40 dB sous la plus forte ; on garde 60 ms de marge
+      const d = buf.getChannelData(0), fr = Math.round(buf.sampleRate * 0.02), rms = [];
+      for (let i = 0; i + fr <= d.length; i += fr) {
+        let s = 0;
+        for (let j = i; j < i + fr; j++) s += d[j] * d[j];
+        rms.push(Math.sqrt(s / fr));
+      }
+      const th = Math.max(...rms) * 0.01;
+      const first = rms.findIndex((v) => v > th), last = rms.findLastIndex((v) => v > th);
+      if (first < 0) return { buf, from: 0, to: buf.duration };
+      return { buf, from: Math.max(0, first * 0.02 - 0.06), to: Math.min(buf.duration, (last + 1) * 0.02 + 0.06) };
+    })();
+    p.catch(() => player.cache.delete(key));
+    player.cache.set(key, p);
+    if (player.cache.size > 12) player.cache.delete(player.cache.keys().next().value); // mémoire bornée
+  }
+  return player.cache.get(key);
+}
+
 function play(ayahs) {
+  stopAudio();
   const rep = parseInt($('#repeat').value, 10);
   playlist = ayahs.flatMap((x) => Array(rep).fill(x));
   playIdx = 0;
-  playNext();
+  $('#btn-play').textContent = '⏸';
+  runPlaylist(++player.gen, $('#reciter').value);
 }
 
-async function playNext() {
+// verset entendu à partir de maintenant : surligné (texte ou livre)
+function showPlaying(x) {
   document.querySelectorAll('.ayah.playing').forEach((el) => el.classList.remove('playing'));
-  if (playIdx >= playlist.length) { stopAudio(); return; }
-  const x = playlist[playIdx];
-  const reciter = $('#reciter').value;
-  if (reciter === 'me') {
-    const saved = await idbGet(ayahKey(x));
-    if (!playlist.length) return; // arrêté pendant la lecture de la base
-    if (!saved) {
-      showLearnMsg(`Verset ${QURAN[x.s - 1].en} ${x.a} pas encore enregistré avec votre voix.`);
-      while (playIdx < playlist.length && playlist[playIdx] === x) playIdx++;
-      playNext();
-      return;
-    }
-    if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
-    audio.src = URL.createObjectURL(new Blob([saved.buf], { type: saved.type }));
-  } else {
-    audio.src = `https://everyayah.com/data/${reciter}/${pad3(x.s)}${pad3(x.a)}.mp3`;
-  }
-  audio.play().catch(() => stopAudio());
   const el = document.querySelector(`.ayah[data-k="${ayahKey(x)}"]`);
   if (el && learnView === 'text') { el.classList.add('playing'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   markBookAyah(ayahKey(x), 'playing');
-  $('#btn-play').textContent = '⏸';
+}
+
+async function runPlaylist(gen, reciter) {
+  const ctx = audioCtx();
+  const live = () => gen === player.gen;
+  // attend que l'horloge du son atteigne t (en s) ; false si la lecture a été arrêtée
+  const until = async (t) => {
+    while (live() && ctx.currentTime < t) await new Promise((r) => setTimeout(r, Math.min(250, (t - ctx.currentTime) * 1000)));
+    return live();
+  };
+  try { await ctx.resume(); } catch { /* déjà actif */ }
+  let t = 0; // fin du verset programmé en dernier (horloge du son)
+  for (; playIdx < playlist.length; playIdx++) {
+    const x = playlist[playIdx];
+    let seg;
+    try { seg = await loadAyahAudio(x, reciter); } catch { seg = undefined; }
+    if (!live()) return;
+    if (playlist[playIdx + 1]) loadAyahAudio(playlist[playIdx + 1], reciter).catch(() => {}); // le suivant, en avance
+    if (seg === null) {
+      showLearnMsg(`Verset ${QURAN[x.s - 1].en} ${x.a} pas encore enregistré avec votre voix.`);
+      continue;
+    }
+    if (!seg) { showLearnMsg('Récitation introuvable (réseau ?).'); break; }
+    const at = Math.max(t ? t + VERSE_GAP : 0, ctx.currentTime + 0.05), len = seg.to - seg.from;
+    const src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = seg.buf;
+    // fondu de 20 ms aux deux bouts : pas de « clic » là où le silence a été coupé
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(1, at + 0.02);
+    g.gain.setValueAtTime(1, at + len - 0.02);
+    g.gain.linearRampToValueAtTime(0, at + len);
+    src.connect(g).connect(ctx.destination);
+    src.start(at, seg.from, len);
+    player.sources.push(src);
+    t = at + len;
+    if (!(await until(at))) return;
+    showPlaying(x);
+    if (!(await until(t - AUDIO_AHEAD))) return;
+  }
+  if (await until(t)) stopAudio();
 }
 
 function stopAudio() {
-  audio.pause();
+  player.gen++;
+  player.sources.forEach((s) => { try { s.stop(); } catch { /* déjà fini */ } });
+  player.sources = [];
   playlist = [];
   document.querySelectorAll('.ayah.playing, .mw.playing').forEach((el) => el.classList.remove('playing'));
   $('#btn-play').textContent = '▶';
 }
-
-audio.addEventListener('ended', () => { playIdx++; playNext(); });
 $('#btn-play').addEventListener('click', () => {
   if (playlist.length) { stopAudio(); return; }
   play(current.ayahs);
@@ -658,6 +726,7 @@ function recordAyah(i) {
   r.onstop = async () => {
     if (r.discard || !chunks.length) return;
     const blob = new Blob(chunks, { type: r.mimeType });
+    player.cache.delete(`me|${key}`); // la lecture reprendra le nouvel enregistrement
     try { await idbPut(key, { buf: await blob.arrayBuffer(), type: r.mimeType }); }
     catch { showLearnMsg("Impossible d'enregistrer dans le téléphone (stockage plein ou bloqué)."); }
   };
