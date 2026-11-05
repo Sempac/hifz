@@ -915,6 +915,14 @@ function quarterHead(q) {
   return div;
 }
 
+// Réduit la police d'un cartouche tant que son texte déborde (noms longs : « الجزء الحادي والعشرون »)
+function fitCart(el) {
+  el.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > el.clientWidth && size > 12) el.style.fontSize = `${--size}px`;
+}
+document.fonts.ready.then(() => document.querySelectorAll('.cart').forEach(fitCart));
+
 // page : page affichée ; q : quart de hizb du verset en cours (sinon celui du haut de la page).
 // En bas du cadre : numéro de page et quart de hizb, qui clignotent quand ils changent.
 async function updateFrame(name, page, q) {
@@ -932,6 +940,7 @@ async function updateFrame(name, page, q) {
   view.querySelector('.c-juz').textContent = `الجزء ${JUZ[Math.ceil(QURAN[s - 1].q[a - 1] / 8) - 1]}`;
   view.querySelector('.c-page').textContent = arNum(page);
   view.querySelector('.c-rub').textContent = quarterLabel(q);
+  view.querySelectorAll('.cart').forEach(fitCart);
   const flash = (el) => { el.classList.remove('changed'); void el.offsetWidth; el.classList.add('changed'); };
   if (turned) flash(view.querySelector('.c-page'));
   if (newQ) flash(view.querySelector('.c-rub'));
