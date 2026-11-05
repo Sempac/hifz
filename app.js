@@ -555,6 +555,39 @@ const AUDIO_AHEAD = 2;    // le verset suivant est programmé 2 s avant la fin d
 const player = { ctx: null, gen: 0, sources: [], cache: new Map() };
 const audioCtx = () => (player.ctx ||= new (window.AudioContext || window.webkitAudioContext)());
 
+// Récitation enregistrée d'un seul tenant (v79, 06/11/2026) : même enchaînés sans trou, les fichiers
+// par verset restent coupés là où le récitateur, lui, continue (36:3-4 « الْمُرْسَلِينَ عَلَىٰ صِرَاطٍ »
+// lu d'une traite, le fichier du verset 3 s'arrête au milieu du « نَ »). Pour ces récitateurs, Quran.com
+// fournit la sourate entière en un fichier + l'heure de début et de fin de chaque verset : on lit ce
+// fichier en continu, sans aucune coupure, et on ne saute qu'à une répétition ou à la fin de la sélection.
+// Valeur du choix « récitateur » (dossier everyayah) → numéro de récitation Quran.com
+const SURAH_AUDIO = {
+  Husary_Muallim_128kbps: 12, Husary_128kbps: 6, Minshawy_Murattal_128kbps: 9, Alafasy_128kbps: 7,
+  Abdul_Basit_Murattal_64kbps: 2, Abdul_Basit_Mujawwad_128kbps: 1, 'Abdurrahmaan_As-Sudais_64kbps': 3,
+  'Abu_Bakr_Ash-Shaatree_128kbps': 4, Hani_Rifai_64kbps: 5, 'Saood_ash-Shuraym_128kbps': 10,
+  khalefa_al_tunaiji_64kbps: 161, 'Yasser_Ad-Dussary_128kbps': 97,
+};
+const surahEl = new Audio(); // lecteur du fichier de la sourate (continue aussi écran éteint)
+surahEl.preload = 'auto';
+const surahTimingCache = new Map();
+// { url, at: { verset: [début, fin] (s) } } d'une sourate pour une récitation Quran.com
+function surahTimings(id, s) {
+  const key = `${id}:${s}`;
+  if (!surahTimingCache.has(key)) {
+    const p = fetch(`https://api.qurancdn.com/api/qdc/audio/reciters/${id}/audio_files?chapter=${s}&segments=true`)
+      .then((r) => { if (!r.ok) throw new Error(`minutage ${r.status}`); return r.json(); })
+      .then((j) => {
+        const f = j.audio_files[0], at = {};
+        for (const v of f.verse_timings) at[+v.verse_key.split(':')[1]] = [v.timestamp_from / 1000, v.timestamp_to / 1000];
+        if (!f.audio_url || !Object.keys(at).length) throw new Error('minutage vide');
+        return { url: f.audio_url, at };
+      });
+    p.catch(() => surahTimingCache.delete(key));
+    surahTimingCache.set(key, p);
+  }
+  return surahTimingCache.get(key);
+}
+
 // Son d'un verset : { buf, from, to } (début et fin de la voix, en s) ; null si pas d'enregistrement
 function loadAyahAudio(x, reciter) {
   const key = `${reciter}|${ayahKey(x)}`;
@@ -617,8 +650,34 @@ async function runPlaylist(gen, reciter) {
   };
   try { await ctx.resume(); } catch { /* déjà actif */ }
   let t = 0; // fin du verset programmé en dernier (horloge du son)
+  const id = SURAH_AUDIO[reciter];
+  let follow = false; // le fichier de la sourate est déjà en train de lire ce verset (suite directe)
   for (; playIdx < playlist.length; playIdx++) {
     const x = playlist[playIdx];
+    // récitation d'un seul tenant (fichier de la sourate)
+    let tm = null;
+    if (id) { try { tm = await surahTimings(id, x.s); } catch { tm = null; } }
+    if (!live()) return;
+    const span = tm && tm.at[x.a];
+    if (span) {
+      if (t && !(await until(t))) return; // un verset lu par l'autre méthode se termine d'abord
+      t = 0;
+      if (!follow) {
+        if (surahEl.src !== tm.url) surahEl.src = tm.url;
+        surahEl.currentTime = span[0];
+        try { await surahEl.play(); } catch { showLearnMsg('Récitation introuvable (réseau ?).'); break; }
+        if (!live()) { surahEl.pause(); return; }
+      }
+      showPlaying(x);
+      const nx = playlist[playIdx + 1];
+      follow = !!(nx && nx.s === x.s && nx.a === x.a + 1 && tm.at[nx.a]); // verset suivant : on laisse lire
+      const end = follow ? tm.at[nx.a][0] : span[1];
+      while (live() && !surahEl.ended && surahEl.currentTime < end) await new Promise((r) => setTimeout(r, 40));
+      if (!live()) return;
+      if (!follow) surahEl.pause();
+      continue;
+    }
+    follow = false;
     let seg;
     try { seg = await loadAyahAudio(x, reciter); } catch { seg = undefined; }
     if (!live()) return;
@@ -651,6 +710,7 @@ function stopAudio() {
   player.gen++;
   player.sources.forEach((s) => { try { s.stop(); } catch { /* déjà fini */ } });
   player.sources = [];
+  surahEl.pause();
   playlist = [];
   document.querySelectorAll('.ayah.playing, .mw.playing').forEach((el) => el.classList.remove('playing'));
   $('#btn-play').textContent = '▶';
