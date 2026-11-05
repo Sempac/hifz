@@ -239,13 +239,23 @@ let pickerSurah = null;
 function openPicker(s) {
   const saved = store.get('range-' + s.n, null);
   const total = s.a.length;
-  $('#picker-title').textContent = `${s.n}. ${s.en} — ${s.name}`;
+  // (nom arabe isolé : sinon le nombre de versets se met dans le désordre)
+  $('#picker-title').innerHTML = `${s.n}. ${s.en} — <bdi dir="rtl">${s.name}</bdi><br><small>${total} versets</small>`;
   $('#from').max = $('#to').max = total;
+  // nouvelle sourate : toute la sourate (1 au dernier verset) ; sinon les versets choisis la dernière fois
   $('#from').value = saved ? saved[0] : 1;
-  $('#to').value = saved ? saved[1] : Math.min(total, total <= 20 ? total : 10);
+  $('#to').value = saved ? saved[1] : total;
+  $('#btn-whole').textContent = `📗 Toute la sourate (versets 1 à ${total})`;
+  $('#btn-whole').hidden = !saved || (saved[0] === 1 && saved[1] === total);
   pickerSurah = s;
   $('#picker').hidden = false;
 }
+
+$('#btn-whole').addEventListener('click', () => {
+  $('#from').value = 1; $('#to').value = pickerSurah.a.length; $('#btn-whole').hidden = true;
+});
+// toucher une case : son chiffre est sélectionné, le nouveau chiffre tapé le remplace (plus besoin d'effacer)
+['#from', '#to'].forEach((id) => $(id).addEventListener('focus', (e) => e.target.select()));
 
 function readRange() {
   const s = pickerSurah, total = s.a.length;
