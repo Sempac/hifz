@@ -86,7 +86,7 @@
       <ul id="review-list" class="review-list"></ul>
     </div>
     <div id="panel-fav" class="tab-panel sel-panel" hidden>
-      <p class="sel-help">Vos pages favorites (touchez ☆ à côté du numéro de page, en bas, pour en ajouter ou en retirer).</p>
+      <p class="sel-help">Vos pages et versets favoris (touchez ☆ à côté du numéro de page, en bas, pour choisir la page ou un de ses versets).</p>
       <ul id="fav-list" class="review-list"></ul>
     </div>
   </section>
@@ -104,6 +104,17 @@
         <button id="btn-recite" class="btn primary">🧠 Hifz</button>
       </div>
       <button id="picker-close" class="btn ghost">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Panneau : favoris de la page affichée (étoile à côté du numéro de page) -->
+  <div id="fav-sheet" class="sheet" hidden>
+    <div class="sheet-body">
+      <h2 id="fav-title"></h2>
+      <button id="fav-page" class="btn fav-item"></button>
+      <p class="sel-help">Versets de cette page :</p>
+      <div id="fav-verses" class="fav-verses"></div>
+      <button class="btn primary sheet-close">Fermer</button>
     </div>
   </div>
 

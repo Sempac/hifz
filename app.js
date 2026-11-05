@@ -961,8 +961,9 @@ async function updateFrame(name, page, q) {
   view.querySelector('.c-juz').textContent = `الجزء ${JUZ[Math.ceil(QURAN[s - 1].q[a - 1] / 8) - 1]}`;
   // étoile des favoris dans le cartouche du numéro de page (le coin sert à changer de mode)
   const pg = view.querySelector('.c-page');
-  pg.textContent = `${favs[page] ? '★' : '☆'} ${arNum(page)}`;
-  pg.classList.toggle('fav-on', !!favs[page]);
+  const on = !!favs[page] || allAyahs().some((x) => x.p === page && favVerses[ayahKey(x)]);
+  pg.textContent = `${on ? '★' : '☆'} ${arNum(page)}`;
+  pg.classList.toggle('fav-on', on);
   view.querySelector('.c-rub').textContent = quarterLabel(q);
   view.querySelectorAll('.cart').forEach(fitCart);
   const flash = (el) => { el.classList.remove('changed'); void el.offsetWidth; el.classList.add('changed'); };
@@ -971,17 +972,44 @@ async function updateFrame(name, page, q) {
 }
 
 // ---------- Favoris : pages marquées d'une étoile ----------
-// toucher le cartouche du numéro de page (☆ ٥٠) ajoute ou retire la page affichée
+// toucher le cartouche du numéro de page (☆ ٥٠) ouvre un petit menu : la page entière, ou un des
+// versets de la page (05/11/2026)
 const favs = store.get('favs', {}); // { page: date d'ajout }
+const favVerses = store.get('favVerses', {}); // { "s:a": date d'ajout }
+let favView = 'learn';
 document.querySelectorAll('.c-page').forEach((b) => b.addEventListener('click', () => {
-  const name = b.closest('#view-learn') ? 'learn' : 'recite';
-  const p = framePage[name];
-  if (!p) return;
-  if (favs[p]) delete favs[p]; else favs[p] = Date.now();
-  store.set('favs', favs);
-  updateFrame(name, p, frameQuarter[name]);
-  renderFavs();
+  favView = b.closest('#view-learn') ? 'learn' : 'recite';
+  if (framePage[favView]) openFavSheet(framePage[favView]);
 }));
+
+function openFavSheet(p) {
+  $('#fav-title').textContent = `Favoris · page ${p}`;
+  const pageBtn = $('#fav-page');
+  pageBtn.textContent = `${favs[p] ? '★' : '☆'} Page ${p} entière`;
+  pageBtn.classList.toggle('on', !!favs[p]);
+  pageBtn.onclick = () => toggleFav(favs, 'favs', p, p);
+  const box = $('#fav-verses');
+  box.innerHTML = '';
+  for (const x of allAyahs().filter((y) => y.p === p)) {
+    const k = ayahKey(x);
+    const b = document.createElement('button');
+    b.className = 'btn fav-item' + (favVerses[k] ? ' on' : '');
+    // le début du verset dans son propre bloc : l'arabe ne se mélange pas au texte français
+    b.innerHTML = `<span>${favVerses[k] ? '★' : '☆'} ${QURAN[x.s - 1].en} ${x.a}</span><bdi dir="rtl" lang="ar"></bdi>`;
+    b.querySelector('bdi').textContent = ayahText(x).split(/\s+/).slice(0, 3).join(' ') + ' …';
+    b.onclick = () => toggleFav(favVerses, 'favVerses', k, p);
+    box.appendChild(b);
+  }
+  $('#fav-sheet').hidden = false;
+}
+
+function toggleFav(obj, key, k, p) {
+  if (obj[k]) delete obj[k]; else obj[k] = Date.now();
+  store.set(key, obj);
+  updateFrame(favView, p, frameQuarter[favView]);
+  renderFavs();
+  openFavSheet(p);
+}
 
 const pageSelection = (p) => ({ title: `Page ${p}`, ayahs: allAyahs().filter((x) => x.p === p) });
 
@@ -989,7 +1017,19 @@ function renderFavs() {
   const ul = $('#fav-list');
   ul.innerHTML = '';
   const pages = Object.keys(favs).map(Number).sort((x, y) => x - y);
-  if (!pages.length) { ul.innerHTML = '<li><span class="rinfo">Aucune page favorite.</span></li>'; return; }
+  const verses = Object.keys(favVerses).map((k) => k.split(':').map(Number)).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  if (!pages.length && !verses.length) { ul.innerHTML = '<li><span class="rinfo">Aucun favori.</span></li>'; return; }
+  for (const [s, a] of verses) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="rw">★</span><span class="rinfo">${QURAN[s - 1].en} ${a} · page ${QURAN[s - 1].p[a - 1]}</span>`
+      + '<button aria-label="Lire / Écouter">📖</button><button aria-label="Hifz">🧠</button><button aria-label="Retirer">✕</button>';
+    const [bl, br, bx] = li.querySelectorAll('button');
+    const sel = () => ({ title: `${QURAN[s - 1].en} ${a}`, ayahs: [{ s, a }] });
+    bl.addEventListener('click', () => { current = sel(); openLearn(); });
+    br.addEventListener('click', () => { current = sel(); openRecite(); });
+    bx.addEventListener('click', () => { delete favVerses[`${s}:${a}`]; store.set('favVerses', favVerses); renderFavs(); });
+    ul.appendChild(li);
+  }
   for (const p of pages) {
     const first = allAyahs().find((x) => x.p === p);
     const li = document.createElement('li');
