@@ -164,15 +164,18 @@
       (sur iPhone, utilisez Safari pour cette version).
       Vous pouvez quand même réciter et toucher <b>Indice</b> pour vérifier mot par mot.
     </div>
-    <div id="heard" class="heard" dir="auto" lang="ar"></div>
-    <!-- conseils de récitation (volume, vitesse) et jauge du micro, serveur Hifz seulement -->
-    <div id="coach" class="coach" hidden></div>
+    <!-- moitié basse de l'écran : ce que le micro entend, en grand, et les messages (05/11/2026) -->
+    <div id="talk" class="talk">
+      <div id="heard" class="heard" dir="auto" lang="ar"></div>
+      <div id="fix" class="fix" hidden></div>
+      <div id="pron-note" class="pron-note" hidden></div>
+      <!-- conseils de récitation (volume, vitesse), serveur Hifz seulement -->
+      <div id="coach" class="coach" hidden></div>
+    </div>
     <div id="waqf-sign" class="waqf-sign" hidden></div>
-    <div id="fix" class="fix" hidden></div>
     <div id="vu" class="vu" hidden><i></i></div>
     <!-- niveau de prononciation du dernier mot, comparé au récitateur (serveur Hifz) -->
     <div id="pron" class="pron" hidden><i></i><b dir="ltr"></b></div>
-    <div id="pron-note" class="pron-note" hidden></div>
     <!-- loupe : la ligne en cours (et ses voisines) agrandie, qui suit la récitation -->
     <div id="lens" class="lens" hidden><div class="lens-in"></div></div>
     <div id="fab-group" class="fab-group">

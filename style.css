@@ -436,6 +436,27 @@ body {
 .pron-badge.low { background: #d64545; }
 #view-recite #no-speech { position: absolute; left: 16px; right: 16px; top: 54px; z-index: 7; margin: 0; }
 
+/* Réciter coupé en deux (05/11/2026) : en haut le livre dans son cadre (inchangé, en plus petit),
+   en bas un second cadre avec ce que le micro entend, à la taille du texte du livre, et les messages. */
+#view-recite { --talk-h: 44dvh; padding-bottom: calc(var(--talk-h) + env(safe-area-inset-bottom)); }
+#view-recite .corner.bl, #view-recite .corner.br { bottom: calc(var(--talk-h) + env(safe-area-inset-bottom) + 1px); }
+#view-recite .talk {
+  position: absolute; left: 6px; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 6px); height: calc(var(--talk-h) - 12px);
+  display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; overflow-y: auto;
+  background: var(--page); color: var(--page-ink);
+  border: 3px double var(--gold); border-radius: 4px; box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--gold);
+}
+#view-recite .talk > * { position: static; inset: auto; width: auto; max-width: none; margin: 0; transform: none; box-shadow: none; flex: none; }
+#view-recite .talk .heard {
+  font-family: "Amiri Quran", serif; font-size: 1.75rem; line-height: 2.2; text-align: start;
+  white-space: normal; overflow: visible; text-overflow: clip; padding: 0; background: none; color: var(--page-ink);
+}
+/* messages en français (état du serveur, mot validé…) : taille normale */
+#view-recite .talk .heard.latin { font-family: inherit; font-size: 1.1rem; line-height: 1.5; text-align: center; }
+#view-recite .talk .coach { align-self: center; }
+/* jauge du micro et niveau de prononciation : à hauteur du livre */
+#view-recite .vu, #view-recite .pron { top: calc((100dvh - var(--talk-h)) / 2); height: calc((100dvh - var(--talk-h)) * .5); }
+
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
 .set-row select {
   padding: 8px; border-radius: 10px; font-size: 1rem; max-width: 60%;

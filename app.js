@@ -686,7 +686,7 @@ function placeWaqf() {
     const h = el.offsetHeight || 28;
     if (above - h < 50) { el.style.top = below + 'px'; below += h + 6; } else { el.style.top = above - h + 'px'; above -= h + 6; }
   }
-  const items = [$('#heard'), $('#pron-note'), $('#fix')].filter((x) => !x.hidden && x.textContent);
+  const items = [$('#heard'), $('#pron-note'), $('#fix')].filter((x) => !x.hidden && x.textContent && !x.closest('.talk'));
   const total = items.reduce((s, x) => s + x.offsetHeight + 6, 0);
   let y = below + total > vr.bottom - 40 && above - total > vr.top + 46 ? above - total : below;
   for (const x of items) { x.style.top = y + 'px'; y += x.offsetHeight + 6; }
@@ -695,6 +695,9 @@ function placeWaqf() {
 const placeSoon = () => { cancelAnimationFrame(placeSoon.f); placeSoon.f = requestAnimationFrame(placeWaqf); };
 for (const id of ['#heard', '#pron-note', '#fix']) new MutationObserver(placeSoon).observe($(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
 document.addEventListener('scroll', placeSoon, true);
+// cadre du bas : texte arabe entendu en grand, messages en français en taille normale
+new MutationObserver(() => $('#heard').classList.toggle('latin', /[A-Za-z]/.test($('#heard').textContent)))
+  .observe($('#heard'), { childList: true, characterData: true, subtree: true });
 addEventListener('resize', placeSoon);
 
 function openRecite() {
@@ -845,8 +848,9 @@ function updateLens(target) {
   lens.style.height = lensH + 'px';
   inner.style.transform = `translateX(6px) scale(${sx}, ${sy})`;
   // vertical : centré sur la ligne en cours, dans les limites du cadre
-  const vr = views.recite.getBoundingClientRect();
-  const top = Math.max(vr.top + 46, Math.min(lr.top + lr.height / 2 - lensH / 2, vr.bottom - 42 - lensH));
+  const minTop = views.recite.querySelector('.fhead').getBoundingClientRect().bottom;
+  const maxBottom = views.recite.querySelector('.ffoot').getBoundingClientRect().top;
+  const top = Math.max(minTop, Math.min(lr.top + lr.height / 2 - lensH / 2, maxBottom - lensH));
   lens.style.top = top + 'px';
   setTimeout(placeWaqf, 300); // après le glissement de la loupe (.25 s)
 }
@@ -2217,7 +2221,7 @@ function onResult(e) {
     }
   }
   rec.heardCount = bestCount;
-  const tail = bestText.split(/\s+/).slice(-8).join(' ');
+  const tail = bestText.split(/\s+/).slice(-20).join(' '); // cadre du bas : plusieurs lignes en grand
   // mots dits après le mot faux (signal pas suivi) : pas affichés en bas, ils dévoileraient la suite
   const waiting = best.back >= 0 && best.back === best.pos && best.ignored > 0;
   $('#heard').textContent = waiting ? '⏪ Revenez au mot faux.'
