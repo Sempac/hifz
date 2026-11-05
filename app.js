@@ -1617,6 +1617,125 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
   return st;
 }
 
+// ---------- Découpage du texte entendu selon le texte attendu (05/11/2026) ----------
+// Le modèle place lui-même les espaces entre les mots et se trompe parfois : « احز بين » pour
+// « الْحِزْبَيْنِ », « لَوْ لَيَأْتُونَ » pour « لَوْلَا يَأْتُونَ ». Les lettres entendues (sans les espaces)
+// sont alignées lettre à lettre sur les mots attendus, puis recoupées à la fin de chaque mot attendu,
+// seulement là où le résultat ressemble bien aux mots attendus ; la comparaison mot à mot (align)
+// juge ensuite chaque mot comme avant (oubli, autre mot, mot en trop, voyelles…).
+// Réglage ⚙ « Découpage selon le texte » (activé par défaut) : le désactiver revient à l'ancien comportement.
+let recutOn = store.get('recut', true);
+
+// Lettres d'un mot tel qu'écrit : la lettre normalisée k commence à cut[k] dans le texte (avec ses
+// signes) ; null si la découpe lettre par lettre ne redonne pas norm(mot) (mot alors gardé entier)
+function letterCuts(raw) {
+  const s = raw.normalize('NFC'), cut = [];
+  let n = '';
+  for (let x = 0; x < s.length; x++) {
+    if (!/[ء-يٱ]/.test(s[x]) || s[x] === 'ـ') continue; // signes (voyelles, marques du mushaf) : avec leur lettre
+    const c = norm(s[x]);
+    for (let k = 0; k < c.length; k++) cut.push(x);
+    n += c;
+  }
+  return n === norm(raw) ? { s, cut } : null;
+}
+
+function recut(heard, raw, stops, pron, p0) {
+  const E = rec.words, keep = { heard, raw, stops, pron, changed: 0 };
+  if (!heard.length || p0 >= E.length) return keep;
+  // lettres entendues : jeton d'origine et rang dans le jeton
+  const H = [], cuts = raw.map(letterCuts);
+  heard.forEach((w, t) => { for (let k = 0; k < w.length; k++) H.push({ c: w[k], t, k }); });
+  // lettres attendues, sur une fenêtre assez large pour tout ce qui a été entendu
+  const X = [];
+  for (let j = p0; j < E.length && X.length < H.length * 2 + 60; j++) for (const c of E[j].norm) X.push({ c, j });
+  const n = H.length, m = X.length;
+  if ((n + 1) * (m + 1) > 8e6) return keep;
+  // alignement : chaque lettre en plus, en moins ou différente coûte 1 ; la fin du texte attendu est
+  // libre (on ne sait pas jusqu'où la récitation est allée). Calculé dans une bande autour de la
+  // diagonale (jusqu'à 400 lettres entendues en plus : versets repris, bruit ; 150 attendues en moins) :
+  // 10 fois plus rapide sur une longue récitation
+  const BAND_H = 400, BAND_E = 150, INF = 1e9;
+  const back = new Uint8Array((n + 1) * (m + 1)); // 1 diagonale, 2 lettre entendue en plus, 3 lettre attendue en moins
+  let prev = new Int32Array(m + 1).fill(INF), cur = new Int32Array(m + 1).fill(INF);
+  prev[0] = 0;
+  for (let j = 1; j <= Math.min(m, BAND_E); j++) { prev[j] = j; back[j] = 3; }
+  for (let i = 1; i <= n; i++) {
+    const lo = Math.max(1, i - BAND_H), hi = Math.min(m, i + BAND_E);
+    cur.fill(INF);
+    if (lo === 1) { cur[0] = i; back[i * (m + 1)] = 2; }
+    const hc = H[i - 1].c;
+    for (let j = lo; j <= hi; j++) {
+      let v = prev[j - 1] + (hc === X[j - 1].c ? 0 : 1), b = 1;
+      if (prev[j] + 1 < v) { v = prev[j] + 1; b = 2; }
+      if (cur[j - 1] + 1 < v) { v = cur[j - 1] + 1; b = 3; }
+      cur[j] = v; back[i * (m + 1) + j] = b;
+    }
+    [prev, cur] = [cur, prev];
+  }
+  let jEnd = 0;
+  for (let j = 1; j <= m; j++) if (prev[j] < prev[jEnd]) jEnd = j;
+  if (prev[jEnd] >= INF) return keep; // hors de la bande : récitation trop éloignée du texte attendu
+  // mot attendu de chaque lettre entendue (-1 : lettre en plus)
+  const lab = new Array(n).fill(-1);
+  for (let i = n, j = jEnd; i > 0 || j > 0;) {
+    const b = back[i * (m + 1) + j];
+    if (b === 1 && i > 0 && j > 0) { lab[i - 1] = X[j - 1].j; i--; j--; } else if ((b === 2 || j === 0) && i > 0) i--; else j--;
+  }
+  // lettre en plus au milieu d'un mot attendu (même jeton, même mot de part et d'autre) : à ce mot
+  for (let i = 0; i < n; i++) {
+    if (lab[i] >= 0) continue;
+    let a = i - 1, z = i + 1;
+    while (z < n && lab[z] < 0) z++;
+    if (a >= 0 && z < n && lab[a] === lab[z] && H[a].t === H[z].t) for (let x = i; x < z; x++) lab[x] = lab[a];
+  }
+  // découpe proposée : une coupure entre deux lettres de mots attendus différents, ou là où le modèle
+  // en mettait une à côté d'une lettre en plus
+  const groups = [];
+  for (let i = 0; i < n; i++) {
+    const g = groups[groups.length - 1];
+    const join = g && (lab[i] >= 0 ? lab[i] === g.j : g.j < 0 && H[i].t === H[i - 1].t);
+    if (join) g.end = i + 1; else groups.push({ j: lab[i], start: i, end: i + 1 });
+  }
+  // zones : jetons d'origine reliés par un changement de découpe ; une zone n'est recoupée que si
+  // chaque nouveau morceau ressemble à son mot attendu, et qu'aucun jeton d'origine n'y était déjà
+  // exactement un des mots attendus (ou une écriture retenue pour lui)
+  const tokOf = (g) => [H[g.start].t, H[g.end - 1].t];
+  const zones = [];
+  for (const g of groups) {
+    const [a, z] = tokOf(g), last = zones[zones.length - 1];
+    if (last && a <= last.z) { last.z = Math.max(last.z, z); last.groups.push(g); } else zones.push({ a, z, groups: [g] });
+  }
+  const outH = [], outR = [], outS = new Set(), outP = [];
+  let changed = 0;
+  const pushOrig = (t) => { outH.push(heard[t]); outR.push(raw[t]); outP.push(pron ? pron[t] : null); if (stops.has(t)) outS.add(outH.length - 1); };
+  for (const zn of zones) {
+    const piece = (g) => H.slice(g.start, g.end).map((h) => h.c).join('');
+    const exactly = zn.groups.length === zn.z - zn.a + 1 && zn.groups.every((g, q) => H[g.start].t === zn.a + q && H[g.start].k === 0 && g.end - g.start === heard[zn.a + q].length);
+    const words = new Set(zn.groups.map((g) => g.j));
+    const ok = !exactly && zn.groups.every((g) => g.j >= 0 && same(piece(g), E[g.j].norm))
+      && zn.groups.every((g) => cuts[H[g.start].t] && cuts[H[g.end - 1].t])
+      && !Array.from({ length: zn.z - zn.a + 1 }, (_, q) => heard[zn.a + q]).some((w) => [...words].some((j) => w === E[j].norm || isLearned(w, E[j].norm)));
+    if (!ok) { for (let t = zn.a; t <= zn.z; t++) pushOrig(t); continue; }
+    changed++;
+    for (const g of zn.groups) {
+      // texte écrit (avec voyelles) du morceau : bouts des jetons d'origine recollés
+      let r = '';
+      for (let i = g.start; i < g.end;) {
+        const t = H[i].t, cu = cuts[t];
+        let e = i; while (e < g.end && H[e].t === t) e++;
+        const from = H[i].k === 0 ? 0 : cu.cut[H[i].k], to = H[e - 1].k + 1 < cu.cut.length ? cu.cut[H[e - 1].k + 1] : cu.s.length;
+        r += cu.s.slice(from, to);
+        i = e;
+      }
+      const lt = H[g.end - 1].t;
+      outH.push(piece(g)); outR.push(r); outP.push(null);
+      if (stops.has(lt) && H[g.end - 1].k === heard[lt].length - 1) outS.add(outH.length - 1);
+    }
+  }
+  return changed ? { heard: outH, raw: outR, stops: outS, pron: pron ? outP : null, changed } : keep;
+}
+
 // L'utilisateur touche un mot marqué faux à tort : il devient juste, et ce que
 // la reconnaissance avait entendu à sa place sera accepté la prochaine fois.
 function acceptWord(i) {
@@ -2352,7 +2471,10 @@ function onResult(e) {
     const heard = raw.map(norm);
     const stops = rec.engine === 'server' ? new Set([...rec.segEnds].map((k) => k - rec.offset)) : new Set();
     alignPron = rec.engine === 'server' && rec.pronHeard ? rec.pronHeard.slice(rec.offset) : null;
-    const st = align(clone(rec.base), heard.slice(rec.offset), raw.slice(rec.offset), stops, rec.engine === 'server' && !isFinal);
+    let h = heard.slice(rec.offset), rw = raw.slice(rec.offset), sp = stops;
+    // serveur : mots recoupés selon le texte attendu (voir recut)
+    if (rec.engine === 'server' && recutOn) ({ heard: h, raw: rw, stops: sp, pron: alignPron } = recut(h, rw, sp, alignPron, rec.base.pos));
+    const st = align(clone(rec.base), h, rw, sp, rec.engine === 'server' && !isFinal);
     const sc = score(st);
     if (sc > bestScore) { best = st; bestScore = sc; bestText = text; bestCount = heard.length; }
   }
@@ -2580,6 +2702,8 @@ $('#opt-phrase').addEventListener('change', () => {
   store.set('phrase', rec.phrase);
   if (rec.listening) { stopListening(); startListening(); }
 });
+$('#opt-recut').checked = recutOn;
+$('#opt-recut').addEventListener('change', () => { recutOn = $('#opt-recut').checked; store.set('recut', recutOn); });
 $('#opt-delay').checked = rec.showDelay;
 $('#opt-delay').addEventListener('change', () => {
   rec.showDelay = $('#opt-delay').checked;
