@@ -1345,7 +1345,7 @@ const LETTER_TIPS = {
 // Bilan des lettres fautives : pour chaque lettre attendue, nombre de mots où elle a été dite comme
 // une autre, sur les mots récités qui la contiennent ; gardé d'une récitation à l'autre (localStorage
 // « letters ») pour suivre les progrès
-function letterReport(marks) {
+function letterReport(marks, count = true) {
   const faults = {};
   for (const [i, f] of Object.entries(rec.letterFaults)) {
     (faults[f.exp] ||= { n: 0, got: {}, words: [] }).n++;
@@ -1356,13 +1356,14 @@ function letterReport(marks) {
   const today = new Date().toISOString().slice(0, 10);
   const out = Object.entries(faults).map(([exp, f]) => {
     // mots récités contenant la lettre, et ceux où elle a été bien dite (mot juste du premier coup)
-    const withL = rec.words.filter((w) => w.norm.includes(exp)).length;
+    const withL = rec.words.slice(0, marks.length).filter((w) => w.norm.includes(exp)).length; // mots déjà récités
     const okL = rec.words.filter((w, i) => w.norm.includes(exp) && marks[i] === 'ok').length;
     const s = (stats[exp] ||= { faults: 0, ok: 0, sessions: [] });
     const got = Object.entries(f.got).sort((x, y) => y[1] - x[1])[0][0];
-    if (rec.letterCounted !== rec.firstErr) { s.faults += f.n; s.ok += okL; s.sessions = [...s.sessions, today].slice(-20); s.mainGot = got; }
+    if (count && rec.letterCounted !== rec.firstErr) { s.faults += f.n; s.ok += okL; s.sessions = [...s.sessions, today].slice(-20); s.mainGot = got; }
     return { exp, got, n: f.n, withL, okL, words: f.words, tip: LETTER_TIPS[exp] || '' };
   });
+  if (!count) return out.sort((x, y) => y.n - x.n); // bilan partiel (micro arrêté) : compté à la vraie fin
   rec.letterCounted = rec.firstErr; // une seule fois par récitation (finish peut être rappelé)
   store.set('letters', stats);
   return out.sort((x, y) => y.n - x.n);
@@ -2193,19 +2194,22 @@ function playWord(i) {
 function finish() {
   $('#lens').hidden = true;
   stopListening();
-  const marks = rec.words.map((_, i) => markOf(rec.shown, i));
+  // micro arrêté avant la fin (05/11/2026) : bilan des seuls mots déjà récités (les suivants ne
+  // comptent ni justes ni faux) ; « À revoir » et le bilan envoyé au serveur attendent la vraie fin
+  const n = Math.min(rec.shown.pos, rec.words.length), partial = n < rec.words.length;
+  const marks = rec.words.slice(0, n).map((_, i) => markOf(rec.shown, i));
   const ok = marks.filter((m) => m === 'ok').length;
   const unsure = marks.filter((m) => m === 'unsure').length;
-  const pct = Math.round((ok / Math.max(1, rec.words.length - unsure)) * 100);
+  const pct = Math.round((ok / Math.max(1, n - unsure)) * 100);
   // progrès des mots « À revoir » : une seule fois par récitation (finish peut être rappelé)
-  const first = rec.reviewOut === null;
+  const first = !partial && rec.reviewOut === null;
   if (first) rec.reviewOut = updateReview();
   const flagged = [...rec.flagged].sort((x, y) => x - y).map((i) => rec.words[i]);
 
   // les mots à retravailler, par nature d'erreur : mémoire (oubli, autre mot, mot en trop,
   // indice), prononciation, et mots justes que le micro avait mal entendus (validés en les touchant)
   const memory = [], pron = [], misheard = [];
-  rec.words.forEach((w, i) => {
+  rec.words.slice(0, n).forEach((w, i) => {
     const m = marks[i];
     if (rec.overrides.has(i)) { misheard.push({ i }); return; }
     if (m === 'ok' || rec.forcedBad.has(i)) return; // marqué faux à la main : dans « À revoir »
@@ -2221,7 +2225,7 @@ function finish() {
   for (const p of pron) {
     if (!rec.letterFaults[p.i] && rec.shown.vow[p.i]) { const f = letterFault(rec.words[p.i].text, rec.shown.vow[p.i]); if (f) rec.letterFaults[p.i] = f; }
   }
-  const letters = letterReport(marks);
+  const letters = letterReport(marks, !partial);
   const letterWords = letters.flatMap((l) => l.words.map((i) => ({ i })));
   const lettersHtml = letters.length
     ? `<div class="rv"><b>🔤 Lettres à travailler</b><br><small>Prononcées autrement que par les récitateurs : écoutez (🔊) le mot, puis répétez-le en soignant la lettre.</small>`
@@ -2248,7 +2252,8 @@ function finish() {
   // dans l'ordre demandé (05/11/2026) : mots où l'on s'est trompé, puis mots oubliés, puis prononciation
   const wrong = memory.filter((x) => x.kind === 'subst' || x.kind === 'extra');
   const forgot = memory.filter((x) => !wrong.includes(x));
-  $('#summary').innerHTML = `<b>${pct} %</b><br>✅ ${ok} mot(s) juste(s) du premier coup`
+  $('#summary').innerHTML = (partial ? `<small>⏸ Micro arrêté au mot ${n} sur ${rec.words.length} : bilan des mots déjà récités. 🎤 pour reprendre.</small><br>` : '')
+    + `<b>${pct} %</b><br>✅ ${ok} mot(s) juste(s) du premier coup`
     + (rec.reviewOut ? `<br>🎉 ${rec.reviewOut} mot(s) sorti(s) de « À revoir »` : '')
     + group('❌ Trompé', wrong, 'Un autre mot dit à la place, ou un mot en trop : réciter ces versets encore.', 'btn-redo-wrong')
     + group('🕳 Oublié', forgot, 'Mots oubliés ou montrés après une hésitation : réciter ces versets encore.', 'btn-redo-forgot')
@@ -2388,15 +2393,27 @@ async function serverBootFlow() {
   if (!store.get('ghToken', '')) return false;
   rec.booting = true;
   const el = $('#heard');
+  let clock = 0;
   try {
     await bootServer();
-    el.textContent = '🚀 Démarrage du serveur Hifz (2 à 3 minutes)… le micro s\'ouvrira tout seul.';
-    const ok = await waitServerUp((s) => { el.textContent = `🚀 Démarrage du serveur Hifz… ${s} s (2 à 3 minutes en tout), le micro s'ouvrira tout seul.`; });
+    // sablier qui tourne et secondes écoulées sous le message, jusqu'à ce que le serveur soit prêt (05/11/2026)
+    el.innerHTML = '<div>🚀 Démarrage du serveur Hifz (2 à 3 minutes)… le micro s\'ouvrira tout seul.</div>'
+      + '<div class="boot-wait"><span class="hourglass">⏳</span><b class="boot-s">0 s</b><i class="boot-bar"><i></i></i></div>';
+    const t0 = Date.now();
+    clock = setInterval(() => {
+      const s = Math.round((Date.now() - t0) / 1000), n = el.querySelector('.boot-s'), bar = el.querySelector('.boot-bar i');
+      if (!n) { clearInterval(clock); return; } // message remplacé
+      n.textContent = s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+      bar.style.width = `${Math.min(95, (s / 150) * 100)}%`;
+    }, 1000);
+    const ok = await waitServerUp(() => {});
+    clearInterval(clock);
     if (!ok) el.textContent = 'Le serveur ne démarre pas : réessayez, ou lancez « Démarrer Hifz » sur le PC.';
     else if (!views.recite.hidden && !rec.listening) { el.textContent = '✅ Serveur prêt : récitez.'; rec.booting = false; startListening(); }
   } catch (e) {
     el.textContent = `Démarrage impossible (${e.message}) : vérifiez le jeton GitHub dans ⚙.`;
   } finally {
+    clearInterval(clock);
     rec.booting = false;
   }
   return true;
@@ -2407,6 +2424,7 @@ function startListening(again = false) {
   if (rec.engine === 'server' && rec.serverState !== 'up' && store.get('ghToken', '')) { serverBootFlow(); return; }
   if (!recognitionAvailable() || rec.listening) return;
   if (rec.committed.pos >= rec.words.length) resetRecite();
+  $('#summary').hidden = true; // bilan partiel d'un arrêt du micro : on reprend
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
@@ -2515,7 +2533,8 @@ function stopListening() {
 }
 
 $('#btn-mic').addEventListener('click', () => {
-  if (rec.listening) { stopListening(); return; }
+  // arrêt du micro : bilan des mots déjà récités, tout de suite (05/11/2026)
+  if (rec.listening) { stopListening(); if (rec.committed.pos > 0) finish(); return; }
   unlockSayAudio();
   startListening();
 });

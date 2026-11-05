@@ -466,6 +466,13 @@ body {
 /* messages en français (état du serveur, mot validé…) : taille normale */
 #view-recite .talk .heard.latin { font-family: inherit; font-size: 1.1rem; line-height: 1.5; text-align: center; }
 #view-recite .talk .coach { align-self: center; }
+/* attente du démarrage du serveur : sablier qui tourne, secondes écoulées, barre (environ 2 min 30) */
+.boot-wait { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; direction: ltr; }
+.boot-wait .hourglass { display: inline-block; font-size: 2rem; animation: hourglass 2s ease-in-out infinite; }
+.boot-wait .boot-s { min-width: 5.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.boot-wait .boot-bar { flex: 1; max-width: 160px; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--gold) 25%, transparent); overflow: hidden; }
+.boot-wait .boot-bar i { display: block; width: 0; height: 100%; background: var(--gold); transition: width 1s linear; }
+@keyframes hourglass { 0%, 40% { transform: rotate(0); } 50%, 90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
 /* bilan à l'arrêt du micro : il prend tout le cadre du bas (le texte entendu et les messages s'effacent) */
 #view-recite .talk:has(> .summary:not([hidden])) > :not(.summary) { display: none; }
 #view-recite .talk .summary {
