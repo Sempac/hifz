@@ -762,6 +762,7 @@ async function applyReciteView(startPage) {
   $('#recite-book').hidden = !paged;
   rec.book = false;
   rec.spans = rec.textSpans;
+  views.recite.style.removeProperty('--talk-h');
   if (!paged) { closeMushaf(); $('#lens').hidden = true; render(); return; } // le cadre suit le mot attendu (render)
   const keys = new Set(current.ayahs.map(ayahKey));
   const [first, last] = await selectionPages();
@@ -773,7 +774,7 @@ async function applyReciteView(startPage) {
     updateFrame('recite', n, w && QURAN[w.s - 1].p[w.ayah - 1] === n ? QURAN[w.s - 1].q[w.ayah - 1] : 0);
     setTimeout(() => updateLens(rec.lensTarget), 60);
   };
-  await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1]);
+  await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1], fitReciteBook);
   rec.glyph = rec.words.map((w) => {
     const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
     return document.querySelector(`.mbook .mw[data-w="${w.s}:${w.ayah}:${pos}"]`);
@@ -784,6 +785,15 @@ async function applyReciteView(startPage) {
   rec.book = true;
   render();
   updateFrame('recite', mushafCurrentPage());
+}
+
+// Mode livre, écran coupé en deux : la page prend toute la largeur (lignes à leur taille maximale)
+// et le cadre du bas garde la hauteur qui reste, au moins 150 px (05/11/2026).
+function fitReciteBook(need) {
+  const host = $('#recite-book');
+  const talk = views.recite.clientHeight * 0.44 - (need - host.clientHeight);
+  views.recite.style.setProperty('--talk-h', `${Math.round(Math.min(Math.max(talk, 150), views.recite.clientHeight * 0.6))}px`);
+  return host.clientHeight;
 }
 
 const MARK_RANK = { ok: 1, hint: 2, fixed: 3, unsure: 4, bad: 5 };

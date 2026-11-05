@@ -109,10 +109,14 @@ function fitMushafPage(page) {
   const size = Math.min((100 * availW) / maxW, availH / (15 * 1.6)) * 0.98;
   body.style.fontSize = size.toFixed(2) + 'px';
   rows.forEach((r, i) => r.classList.toggle('short', (widths[i] * size) / 100 < availW * 0.85));
+  // hauteur de page avec laquelle les lignes rempliraient toute la largeur
+  return page.clientHeight - availH + 15 * 1.6 * ((100 * availW) / maxW);
 }
 
 // Ouvre le livre dans le conteneur host, sur les pages first … last.
-async function openMushaf(host, first, last, inSel, startPage) {
+// fitHeight(besoin) : facultatif, reçoit la hauteur de page qui remplirait la largeur, ajuste la
+// mise en page autour et renvoie la nouvelle hauteur du conteneur (Réciter coupé en deux).
+async function openMushaf(host, first, last, inSel, startPage, fitHeight) {
   closeMushaf();
   mushaf.pages = [];
   for (let n = first; n <= last; n++) mushaf.pages.push(n);
@@ -122,13 +126,19 @@ async function openMushaf(host, first, last, inSel, startPage) {
   const book = document.createElement('div');
   book.className = 'mbook';
   host.appendChild(book);
-  const W = host.clientWidth, H = host.clientHeight;
+  const W = host.clientWidth;
+  let H = host.clientHeight;
   const els = mushaf.pages.map((n, i) => buildMushafPage(n, datas[i], inSel));
   // la bibliothèque tourne les pages comme un livre latin : on inverse l'ordre pour qu'un
   // glissement de gauche à droite mène à la page suivante (livre arabe)
   const reversed = els.slice().reverse();
   reversed.forEach((el) => { el.style.width = W + 'px'; el.style.height = H + 'px'; book.appendChild(el); });
-  els.forEach(fitMushafPage);
+  const need = Math.max(0, ...els.map(fitMushafPage).filter(Boolean));
+  if (fitHeight && need) {
+    H = fitHeight(Math.ceil(need));
+    els.forEach((el) => { el.style.height = H + 'px'; });
+    els.forEach(fitMushafPage);
+  }
   const idx = (n) => mushaf.pages.length - 1 - mushaf.pages.indexOf(n);
   mushaf.flip = new St.PageFlip(book, {
     width: W, height: H, size: 'fixed', usePortrait: true, showCover: false,
