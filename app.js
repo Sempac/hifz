@@ -702,6 +702,7 @@ const rec = {
   serverUrl: store.get('serverUrl', ''),   // adresse WebSocket du serveur Hifz
   lensTarget: null,     // mot attendu dans le livre (suivi par la loupe)
   showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
+  recentHeard: [], // mots entendus récemment, mot du Coran ou non (pause automatique)
   lastResultAt: 0,      // heure de la dernière réponse du micro
   noReplay: new Set(),  // erreurs vues dans une réponse en retard : marquées, sans rappel
   retries: {},          // mot → nombre de reprises
@@ -2115,11 +2116,21 @@ function checkReplay(st, final) {
   // juste après un rappel, seuls les mots faux interrompent (un mot faux à la reprise, « وَاللَّهُ » pour
   // « فَإِنَّ اللَّهَ », passait sans rien dire, 05/11/2026) ; un mot « non entendu » attend REPLAY_SETTLE mots
   const settling = rec.lastReplayAt >= 0 && st.pos < rec.lastReplayAt + REPLAY_SETTLE;
-  for (let i = Math.max(0, st.pos - REPLAY_WINDOW); i < st.pos; i++) {
+  // serveur : un mot qui manque dans le texte provisoire n'interrompt pas tout de suite, le modèle y
+  // avale souvent les petits mots (22 rappels injustes sur 64 le 05/11/2026) : on attend le texte
+  // définitif du morceau (à la pause, ou 15 s au plus). S'il y manque encore, c'est un vrai oubli :
+  // rappel, même s'il est plus loin que REPLAY_WINDOW (un mot manquant n'est jamais accepté).
+  const server = rec.engine === 'server';
+  const from = Math.max(0, st.pos - REPLAY_WINDOW), lo = server && final ? Math.max(0, Math.min(from, rec.lastFinalPos ?? from)) : from;
+  if (server && final) rec.lastFinalPos = st.pos;
+  for (let i = lo; i < st.pos; i++) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
+    const missing = server && errorKind(st, i) === 'forgot';
+    if (i < from && !missing) continue;
+    if (missing && !final) continue;
     if (settling && (m !== 'bad' || i < rec.lastReplayAt)) continue;
-    if (!final && st.pos - 1 - i < (rec.engine === 'server' ? REPLAY_CONFIRM_SERVER : REPLAY_CONFIRM)) continue; // provisoire : pas encore assez sûr
+    if (!final && st.pos - 1 - i < (server ? REPLAY_CONFIRM_SERVER : REPLAY_CONFIRM)) continue; // provisoire : pas encore assez sûr
     replayAt(i, final);
     return true;
   }
@@ -2501,8 +2512,9 @@ function onResult(e) {
       if (m === 'bad' || m === 'unsure') rec.noReplay.add(i);
     }
   }
+  if (autoPause(bestText, newWords)) return;
   rec.heardCount = bestCount;
-  const tail = bestText.split(/\s+/).slice(-5).join(' '); // cadre du bas : les 5 derniers mots, en grand (demande du 05/11/2026)
+  const tail =bestText.split(/\s+/).slice(-5).join(' '); // cadre du bas : les 5 derniers mots, en grand (demande du 05/11/2026)
   // mots dits après le mot faux (signal pas suivi) : pas affichés en bas, ils dévoileraient la suite
   const waiting = best.back >= 0 && best.back === best.pos && best.ignored > 0;
   $('#heard').textContent = waiting ? '⏪ Revenez au mot faux.'
@@ -2518,6 +2530,38 @@ function onResult(e) {
     showFix(prev ? [['⏪ Revenez au mot faux : reprenez après'], [prev, 'ok']] : [['⏪ Revenez au mot faux : reprenez au début du verset.']]);
   }
 }
+// Pause automatique (serveur) : on parle à quelqu'un, au téléphone, la télé… le modèle écrit cette
+// parole en lettres arabes sans aucun sens et chaque mot attendu était refusé deux fois, puis montré
+// (46 rappels en 10 min le 05/11/2026). Sur les 25 dernières secondes, si au moins 12 mots ont été
+// entendus sur 20 s ou plus et que moins de 40 % sont des mots du Coran ou ressemblent à un mot du
+// passage (une récitation mal comprise, avec la télé, reste au-dessus : aucune pause sur les séances
+// du 04/11 et du 05/11, pause 24 s après le début de la conversation du 05/11) : pause, rien n'est compté.
+const NOISE_WINDOW_MS = 25000, NOISE_MIN_WORDS = 12, NOISE_MIN_SPAN_MS = 20000, NOISE_QURAN_SHARE = 0.4;
+function recitationLike(n) {
+  if (isQuranWord(n)) return true;
+  if (n.length < 3) return false;
+  const p = rec.shown?.pos || 0;
+  return rec.words.slice(Math.max(0, p - 30), p + 60).some((e) => Math.abs(e.norm.length - n.length) <= 2
+    && lev(n, e.norm) <= Math.max(1, Math.floor(Math.max(n.length, e.norm.length) * 0.4)));
+}
+function autoPause(text, newWords) {
+  if (rec.engine !== 'server' || !rec.listening || rec.pausing || newWords <= 0) return false;
+  const now = Date.now(), words = text.split(/\s+/).filter((t) => norm(t)).slice(-newWords);
+  for (const w of words) rec.recentHeard.push({ t: now, q: recitationLike(norm(w)) });
+  rec.recentHeard = rec.recentHeard.filter((x) => now - x.t <= NOISE_WINDOW_MS);
+  const R = rec.recentHeard;
+  if (R.length < NOISE_MIN_WORDS || now - R[0].t < NOISE_MIN_SPAN_MS) return false;
+  const share = R.filter((x) => x.q).length / R.length;
+  if (share >= NOISE_QURAN_SHARE) return false;
+  micLog(`pause automatique : ${Math.round(share * 100)} % de mots du Coran sur ${R.length} mots entendus`);
+  stopListening();
+  rec.recentHeard = [];
+  $('#fix').hidden = true;
+  $('#heard').textContent = '⏸ Je n\'entends plus de récitation (conversation, télé…) : rien n\'est compté. Touchez 🎤 pour reprendre.';
+  render();
+  return true;
+}
+
 const LATE_WORDS = 5;   // mots arrivés d'un coup
 const LATE_MS = 2500;   // attente depuis la réponse précédente
 
@@ -2569,7 +2613,7 @@ function startListening(again = false) {
   rec.listening = true;
   rec.lastProgress = Date.now();
   $('#btn-mic').classList.add('on');
-  if (!again) { micT0 = Date.now(); micLines.length = 0; }
+  if (!again) { micT0 = Date.now(); micLines.length = 0; rec.recentHeard = []; }
   micLog(again ? 'micro relancé (retour au verset)' : 'micro lancé');
   startRecognizer();
   if (rec.engine === 'server') pronPrefetch();
@@ -2684,6 +2728,7 @@ $('#btn-restart').addEventListener('click', resetRecite);
 // chacune commence par un bip sur Android, d'où la tolérance sur les premiers mots.
 function newSession() {
   rec.base = clone(rec.committed);
+  rec.lastFinalPos = rec.base.pos; // mots manquants vérifiés au texte définitif à partir d'ici (checkReplay)
   rec.base.grace = GRACE_WORDS;
   rec.base.graceSkip = true;
   rec.base.extra = 0;
