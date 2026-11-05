@@ -247,13 +247,18 @@ body {
   --frame: #1f4d3a; --gold: #c49a45; --cart-ink: #1f4d3a;
   --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%231f4d3a'/%3E%3Cg fill='none' stroke='%23c49a45' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23c49a45'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --page: #24211a; --page-ink: #ece4d0; --frame: #13261d; --gold: #a8853f; --cart-ink: #e2c98f;
-    --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%2313261d'/%3E%3Cg fill='none' stroke='%23a8853f' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23a8853f'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
-  }
+/* Page du mushaf (06/11/2026, demande utilisateur) : page claire comme un mushaf imprimé, même si le
+   téléphone est en mode sombre ; bordure ornée vert clair autour du texte (dessin maison : fleurs à
+   4 pétales sur les côtés, rosaces dans les coins, filets dorés). Mode nuit : ⚙ « Mushaf sombre ». */
+:root {
+  --page: #fffdf7; --band: #dcebdd; --band-ink: #3b7a55;
+  --band-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' fill='%23dcebdd'/%3E%3Cg fill='none' stroke='%23c49a45' stroke-width='1.4'%3E%3Crect x='1' y='1' width='46' height='46'/%3E%3Crect x='15.3' y='15.3' width='17.4' height='17.4'/%3E%3C/g%3E%3Cg fill='%233b7a55'%3E%3Cg id='f'%3E%3Cellipse cx='24' cy='8' rx='1.7' ry='4.6'/%3E%3Cellipse cx='24' cy='8' rx='4.6' ry='1.7'/%3E%3C/g%3E%3Cuse href='%23f' y='32'/%3E%3Cuse href='%23f' transform='rotate(90 24 24)'/%3E%3Cuse href='%23f' transform='rotate(-90 24 24)'/%3E%3Cg id='r'%3E%3Ccircle cx='8' cy='8' r='4.8' fill='none' stroke='%233b7a55' stroke-width='1.3'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/g%3E%3Cuse href='%23r' x='32'/%3E%3Cuse href='%23r' y='32'/%3E%3Cuse href='%23r' x='32' y='32'/%3E%3C/g%3E%3Cg fill='%23c49a45'%3E%3Ccircle cx='24' cy='8' r='1.3'/%3E%3Ccircle cx='24' cy='40' r='1.3'/%3E%3Ccircle cx='8' cy='24' r='1.3'/%3E%3Ccircle cx='40' cy='24' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
+  --band-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' fill='%23dcebdd'/%3E%3Cg fill='%233b7a55'%3E%3Cellipse cx='10' cy='10' rx='1.5' ry='4.2'/%3E%3Cellipse cx='10' cy='10' rx='4.2' ry='1.5'/%3E%3C/g%3E%3Ccircle cx='10' cy='10' r='1.2' fill='%23c49a45'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"] {
+  --band: #183a2a; --band-ink: #a8853f;
+  --band-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' fill='%23183a2a'/%3E%3Cg fill='none' stroke='%23a8853f' stroke-width='1.4'%3E%3Crect x='1' y='1' width='46' height='46'/%3E%3Crect x='15.3' y='15.3' width='17.4' height='17.4'/%3E%3C/g%3E%3Cg fill='%237fae8c'%3E%3Cg id='f'%3E%3Cellipse cx='24' cy='8' rx='1.7' ry='4.6'/%3E%3Cellipse cx='24' cy='8' rx='4.6' ry='1.7'/%3E%3C/g%3E%3Cuse href='%23f' y='32'/%3E%3Cuse href='%23f' transform='rotate(90 24 24)'/%3E%3Cuse href='%23f' transform='rotate(-90 24 24)'/%3E%3Cg id='r'%3E%3Ccircle cx='8' cy='8' r='4.8' fill='none' stroke='%237fae8c' stroke-width='1.3'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/g%3E%3Cuse href='%23r' x='32'/%3E%3Cuse href='%23r' y='32'/%3E%3Cuse href='%23r' x='32' y='32'/%3E%3C/g%3E%3Cg fill='%23a8853f'%3E%3Ccircle cx='24' cy='8' r='1.3'/%3E%3Ccircle cx='24' cy='40' r='1.3'/%3E%3Ccircle cx='8' cy='24' r='1.3'/%3E%3Ccircle cx='40' cy='24' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
+  --band-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' fill='%23183a2a'/%3E%3Cg fill='%237fae8c'%3E%3Cellipse cx='10' cy='10' rx='1.5' ry='4.2'/%3E%3Cellipse cx='10' cy='10' rx='4.2' ry='1.5'/%3E%3C/g%3E%3Ccircle cx='10' cy='10' r='1.2' fill='%23a8853f'/%3E%3C/svg%3E");
   --page: #24211a; --page-ink: #ece4d0; --frame: #13261d; --gold: #a8853f; --cart-ink: #e2c98f;
   --frame-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' fill='%2313261d'/%3E%3Cg fill='none' stroke='%23a8853f' stroke-width='1.1'%3E%3Crect x='8.5' y='8.5' width='11' height='11'/%3E%3Crect x='8.5' y='8.5' width='11' height='11' transform='rotate(45 14 14)'/%3E%3Ccircle cx='14' cy='14' r='2.2'/%3E%3C/g%3E%3Cg fill='%23a8853f'%3E%3Ccircle cx='0' cy='0' r='1.6'/%3E%3Ccircle cx='28' cy='0' r='1.6'/%3E%3Ccircle cx='0' cy='28' r='1.6'/%3E%3Ccircle cx='28' cy='28' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
 }
@@ -261,8 +266,9 @@ body {
 /* écran encadré (Apprendre, Réciter) : toute la hauteur du téléphone */
 .view.framed {
   height: 100dvh; min-height: 0;
-  background: var(--frame) var(--frame-pattern);
-  padding: env(safe-area-inset-top) 6px env(safe-area-inset-bottom);
+  /* fond de page tout autour, comme un mushaf imprimé (06/11/2026 ; avant : cadre vert à motifs) */
+  background: var(--page);
+  padding: env(safe-area-inset-top) 4px env(safe-area-inset-bottom);
 }
 .fhead, .ffoot { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .fhead, .ffoot { height: 56px; padding: 0 60px; }
@@ -278,14 +284,14 @@ body {
 }
 .cart:empty { visibility: hidden; }
 .c-page { min-width: 54px; }
-/* zone de la page (livre ou texte) : bordure dorée comme un mushaf imprimé */
+/* zone de la page (livre ou texte) : bordure ornée comme un mushaf imprimé (dessin dans --band-img) */
 .framed .book-host, .framed > .mushaf {
   flex: 1; min-height: 0; margin: 0;
-  border: 3px double var(--gold); border-radius: 4px; background: var(--page);
-  box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--gold);
+  border: 16px solid var(--band); border-image: var(--band-img) 16 round; background: var(--page);
 }
 .framed > .mushaf { overflow-y: auto; color: var(--page-ink); }
-.book-host { overflow: hidden; }
+/* visible : le cartouche de hizb déborde de la page, posé sur le filet doré de la bordure */
+.book-host { overflow: visible; }
 .mbook { margin: 0 auto; }
 /* loupe : bandeau agrandi sur la ligne en cours, qui peut déborder du cadre */
 .lens {
@@ -301,6 +307,8 @@ body {
 /* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */
 .mbook, #recite-text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
+/* page posée (pas en train de tourner) : le cartouche de hizb peut déborder sur la bordure */
+.book-host .mpage, .book-host .stf__block, .book-host .stf__wrapper, .book-host .stf__parent { overflow: visible !important; }
 
 /* boutons ronds dans les coins, posés sur le cadre */
 .corner {
@@ -334,7 +342,8 @@ body {
 .minner { height: 100%; display: flex; flex-direction: column; }
 .mbody {
   flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between;
-  padding: 10px 22px 8px 34px; /* marge gauche : cartouches de hizb */
+  /* lignes d'un filet doré à l'autre (06/11/2026) : le cartouche de hizb est sur la bordure */
+  padding: 6px 3px 4px;
 }
 .mbody.first { justify-content: center; gap: .35em; }
 .mline {
@@ -520,19 +529,27 @@ body {
 .mw.playing { background: var(--hint-bg); }
 .mw.recording { background: var(--bad-bg); }
 .mline.head { justify-content: center; }
-.mline.head span {
+/* titre de sourate : bandeau orné sur toute la largeur, nom dans un cartouche au centre */
+.mline.head .sband {
+  width: 100%; height: 1.25em; display: flex; align-items: center; justify-content: center;
+  background: var(--band) var(--band-tile); background-size: .62em .62em;
+  border: 1.5px solid var(--gold); box-shadow: inset 0 0 0 2px var(--band), inset 0 0 0 3px var(--gold);
+}
+.mline.head .sband span {
   font-family: "Amiri Quran", serif; font-size: .62em; line-height: 1.5; color: var(--cart-ink);
-  border: 2px solid var(--gold); border-radius: 1em; padding: 0 1.6em; background: var(--page);
-  box-shadow: inset 0 0 0 2px var(--page), inset 0 0 0 3px var(--gold);
+  border: 1.5px solid var(--gold); border-radius: 1em; padding: 0 1.6em 0.12em; background: var(--page);
+  line-height: 1.25;
 }
 .mline.basm { justify-content: center; font-family: "Amiri Quran", serif; font-size: .72em; }
-/* cartouche de hizb dans la marge */
+/* basmala remontée contre le titre de la sourate (06/11/2026) */
+.mline.head + .mline.basm { margin-top: -.75em; }
+/* cartouche de hizb sur le filet doré intérieur de la bordure (côté gauche) */
 .hmark {
-  position: absolute; left: -31px; top: 50%; transform: translateY(-50%); width: 27px;
+  position: absolute; left: -20px; top: 50%; transform: translateY(-50%); width: 18px; z-index: 2;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   padding: 3px 0; overflow: hidden;
   border: 1px solid var(--gold); border-radius: 6px; background: var(--page);
-  font-family: "Amiri Quran", serif; font-size: 7.5px; line-height: 1.15; color: var(--cart-ink);
+  font-family: "Amiri Quran", serif; font-size: 6px; line-height: 1.15; color: var(--cart-ink);
 }
 .hmark span { white-space: nowrap; }
 

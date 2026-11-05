@@ -9,6 +9,15 @@ const store = {
 const arNum = (n) => n.toLocaleString('ar-EG');
 const pad3 = (n) => String(n).padStart(3, '0');
 
+// Mushaf clair par défaut, même si le téléphone est en mode sombre (06/11/2026) ; sombre au choix (⚙)
+const applyNight = () => {
+  const night = store.get('mushafNight', false);
+  document.documentElement.dataset.theme = night ? 'dark' : 'light';
+  document.querySelectorAll('.opt-night').forEach((c) => { c.checked = night; });
+};
+document.querySelectorAll('.opt-night').forEach((c) => c.addEventListener('change', () => { store.set('mushafNight', c.checked); applyNight(); }));
+applyNight();
+
 // Normalise un mot arabe pour la comparaison : sans voyelles, sans signes coraniques,
 // et avec les variantes de lettres ramenées à une seule forme.
 function norm(w) {

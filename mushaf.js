@@ -60,7 +60,7 @@ function buildMushafPage(n, data, inSel) {
     const h = extra[l];
     if (h && h[1] === 'S') {
       row.className = 'mline head';
-      row.innerHTML = `<span>سورة ${QURAN[h[2] - 1].name}</span>`;
+      row.innerHTML = `<span class="sband"><span>سورة ${QURAN[h[2] - 1].name}</span></span>`;
     } else if (h && h[1] === 'B') {
       row.className = 'mline basm';
       row.textContent = BASMALA;
