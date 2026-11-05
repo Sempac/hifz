@@ -206,8 +206,9 @@ function show(name) {
   window.scrollTo(0, 0);
 }
 
-function go(name) {
-  history.pushState({ v: name }, '');
+// replace : changement de mode (Lire / Hifz) — le retour mène à l'écran d'avant, pas à l'autre mode
+function go(name, replace = false) {
+  history[replace ? 'replaceState' : 'pushState']({ v: name }, '');
   show(name);
 }
 
@@ -332,7 +333,7 @@ $('#repeat').addEventListener('change', () => store.set('repeat', $('#repeat').v
 // La sélection couvre-t-elle plusieurs sourates ? (on affiche alors le nom de chaque sourate)
 const multiSurah = () => current.ayahs.some((x) => x.s !== current.ayahs[0].s);
 
-function openLearn() {
+function openLearn(startPage, replace = false) {
   $('#learn-title').textContent = rangeTitle();
   $('#learn-msg').hidden = true;
   const box = $('#learn-text');
@@ -351,9 +352,15 @@ function openLearn() {
     span.addEventListener('click', () => play([x]));
     box.appendChild(span);
   }
-  go('learn');
-  applyLearnView();
+  go('learn', replace);
+  applyLearnView(startPage);
 }
+
+// ---------- Changer de mode sur les mêmes versets (coin en bas à droite) ----------
+// Lire / Écouter → Hifz : la récitation repart du début de la sélection.
+$('#learn-mode').addEventListener('click', () => openRecite(true));
+// Hifz → Lire / Écouter : sur la page affichée.
+$('#recite-mode').addEventListener('click', () => openLearn(framePage.recite || undefined, true));
 
 // Apprendre, affichage texte : en faisant défiler, le cadre suit le verset au milieu de l'écran
 // (numéro de page et quart de hizb en bas)
@@ -700,7 +707,7 @@ new MutationObserver(() => $('#heard').classList.toggle('latin', /[A-Za-z]/.test
   .observe($('#heard'), { childList: true, characterData: true, subtree: true });
 addEventListener('resize', placeSoon);
 
-function openRecite() {
+function openRecite(replace = false) {
   $('#recite-title').textContent = rangeTitle();
   const box = $('#recite-text');
   box.innerHTML = '';
@@ -746,7 +753,7 @@ function openRecite() {
   rec.textSpans = rec.spans;
   rec.book = false;
   resetRecite();
-  go('recite');
+  go('recite', replace);
   rec.placeFab();
   applyReciteView();
 }
@@ -958,8 +965,8 @@ async function updateFrame(name, page, q) {
   const flash = (el) => { el.classList.remove('changed'); void el.offsetWidth; el.classList.add('changed'); };
   if (turned) flash(view.querySelector('.c-page'));
   if (newQ) flash(view.querySelector('.c-rub'));
-  const fav = view.querySelector('.fav-btn');
-  fav.textContent = favs[page] ? '★' : '☆';
+  const fav = $(`#${name}-fav`); // dans ⚙ (le coin en bas à droite sert à changer de mode)
+  fav.textContent = favs[page] ? '★ Page favorite (retirer)' : '☆ Ajouter la page aux favoris';
   fav.classList.toggle('on', !!favs[page]);
 }
 

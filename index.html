@@ -53,8 +53,8 @@
       </div>
       <p id="page-info" class="sel-info"></p>
       <div class="actions">
-        <button id="page-learn" class="btn">📖 Apprendre</button>
-        <button id="page-recite" class="btn primary">🎤 Réciter</button>
+        <button id="page-learn" class="btn">📖 Lire / Écouter</button>
+        <button id="page-recite" class="btn primary">🧠 Hifz</button>
       </div>
     </div>
     <div id="panel-hizb" class="tab-panel sel-panel" hidden>
@@ -73,15 +73,15 @@
       </div>
       <p id="hizb-info" class="sel-info"></p>
       <div class="actions">
-        <button id="hizb-learn" class="btn">📖 Apprendre</button>
-        <button id="hizb-recite" class="btn primary">🎤 Réciter</button>
+        <button id="hizb-learn" class="btn">📖 Lire / Écouter</button>
+        <button id="hizb-recite" class="btn primary">🧠 Hifz</button>
       </div>
     </div>
     <div id="panel-review" class="tab-panel sel-panel" hidden>
       <p class="sel-help">Les mots que vous avez signalés avec ✗. Un mot sort de la liste après 3 récitations justes de suite, ou avec ✕.</p>
       <div id="review-actions" class="actions">
-        <button id="review-learn" class="btn">📖 Apprendre</button>
-        <button id="review-recite" class="btn primary">🎤 Réciter ces versets</button>
+        <button id="review-learn" class="btn">📖 Lire / Écouter</button>
+        <button id="review-recite" class="btn primary">🧠 Hifz sur ces versets</button>
       </div>
       <ul id="review-list" class="review-list"></ul>
     </div>
@@ -100,8 +100,8 @@
         <label>au verset <input id="to" type="number" min="1" inputmode="numeric"></label>
       </div>
       <div class="actions">
-        <button id="btn-learn" class="btn">📖 Apprendre</button>
-        <button id="btn-recite" class="btn primary">🎤 Réciter</button>
+        <button id="btn-learn" class="btn">📖 Lire / Écouter</button>
+        <button id="btn-recite" class="btn primary">🧠 Hifz</button>
       </div>
       <button id="picker-close" class="btn ghost">Annuler</button>
     </div>
@@ -118,7 +118,8 @@
     <button class="back corner tl" aria-label="Retour">←</button>
     <button id="learn-gear" class="corner tr" aria-label="Réglages">⚙</button>
     <button id="btn-play" class="corner bl" aria-label="Écouter">▶</button>
-    <button class="corner br fav-btn" aria-label="Favori">☆</button>
+    <!-- mode : passer en Hifz (mots cachés, micro) sur les mêmes versets -->
+    <button id="learn-mode" class="corner br" aria-label="Passer en mode Hifz">🧠</button>
     <div id="rec-bar" class="rec-bar" hidden>
       <span id="rec-label"></span>
       <button id="rec-next" class="btn primary">Suivant ▶</button>
@@ -148,6 +149,7 @@
         <p class="sel-help">Touchez un verset dans la page pour l'écouter ; ▶ en bas à gauche écoute tout.</p>
         <button id="btn-record" class="btn">⏺ Enregistrer ma récitation</button>
         <button id="btn-view" class="btn">≡ Affichage texte</button>
+        <button id="learn-fav" class="btn fav-btn">☆ Page favorite</button>
         <button class="btn primary sheet-close">Fermer</button>
       </div>
     </div>
@@ -193,7 +195,8 @@
     <button class="back corner tl" aria-label="Retour">←</button>
     <button id="btn-settings" class="corner tr" aria-label="Réglages">⚙</button>
     <button id="btn-mic" class="corner bl mic" aria-label="Micro">🎤</button>
-    <button class="corner br fav-btn" aria-label="Favori">☆</button>
+    <!-- mode : passer en Lire / Écouter (tout visible, récitateur) sur les mêmes versets -->
+    <button id="recite-mode" class="corner br" aria-label="Passer en mode Lire / Écouter">📖</button>
 
     <!-- réglages de la récitation -->
     <div id="settings" class="sheet" hidden>
@@ -202,6 +205,7 @@
         <div class="actions recite-only">
           <button id="btn-restart" class="btn">↺ Recommencer</button>
           <button id="btn-hint" class="btn">💡 Indice (mot suivant)</button>
+          <button id="recite-fav" class="btn fav-btn">☆ Page favorite</button>
         </div>
         <p class="sel-help recite-only">✓ : le mot est juste (le micro s'est trompé), il est validé et retenu. ✗ : vraie faute, le mot va dans « À revoir ». Ces deux boutons se déplacent au doigt.</p>
         <label class="set-row">Niveau de correction
