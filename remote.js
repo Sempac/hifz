@@ -283,6 +283,7 @@ $('#engine').addEventListener('change', () => {
   applyEngineUi();
   if (rec.listening) { stopListening(); startListening(); }
   refreshAvailability();
+  preboot();
 });
 $('#server-url').addEventListener('input', () => {
   rec.serverUrl = $('#server-url').value.trim();
@@ -420,7 +421,30 @@ $('#btn-boot').addEventListener('click', async () => {
   } catch (e) { out.textContent = `❌ Démarrage impossible (${e.message}).`; }
 });
 
+// Démarrage anticipé (05/11/2026) : le serveur met 1 min 30 à 2 min à démarrer (machine Kaggle à
+// attribuer, bibliothèques, modèle) ; demandé dès l'ouverture de l'application, il chauffe pendant le
+// choix de la sourate au lieu de faire attendre au micro. Inutilisé, il s'arrête seul après 20 min.
+$('#opt-preboot').checked = store.get('preboot', true);
+$('#opt-preboot').addEventListener('change', () => {
+  store.set('preboot', $('#opt-preboot').checked);
+  if ($('#opt-preboot').checked) preboot();
+});
+
+async function preboot() {
+  await discoverServer(true);
+  if (rec.engine !== 'server' || !store.get('preboot', true) || !store.get('ghToken', '') || rec.booting) return;
+  if (rec.serverState === 'up') return;
+  try {
+    await bootServer();
+  } catch (e) { micLog(`démarrage anticipé impossible (${e.message})`); }
+}
+
 applyEngineUi();
 serverFromLink();
-discoverServer(true);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) discoverServer(); });
+preboot(); // (cherche aussi l'adresse du serveur)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  // retour dans l'application : serveur peut-être arrêté entre-temps (10 min sans récitation)
+  if (rec.engine === 'server' && store.get('preboot', true) && store.get('ghToken', '')) preboot();
+  else discoverServer(); // (au plus une recherche toutes les 20 s)
+});

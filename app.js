@@ -2540,7 +2540,7 @@ async function serverBootFlow() {
     // sablier qui tourne et secondes écoulées sous le message, jusqu'à ce que le serveur soit prêt (05/11/2026)
     el.innerHTML = '<div>🚀 Démarrage du serveur Hifz (2 à 3 minutes)… le micro s\'ouvrira tout seul.</div>'
       + '<div class="boot-wait"><span class="hourglass">⏳</span><b class="boot-s">0 s</b><i class="boot-bar"><i></i></i></div>';
-    const t0 = Date.now();
+    const t0 = bootAt || Date.now(); // démarrage peut-être déjà demandé à l'ouverture de l'application
     clock = setInterval(() => {
       const s = Math.round((Date.now() - t0) / 1000), n = el.querySelector('.boot-s'), bar = el.querySelector('.boot-bar i');
       if (!n) { clearInterval(clock); return; } // message remplacé
