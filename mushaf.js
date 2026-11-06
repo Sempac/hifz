@@ -116,6 +116,7 @@ function fitMushafPage(page) {
   const size = Math.min((100 * availW) / maxW, availH / (15 * 1.6)) * 0.98;
   body.style.fontSize = size.toFixed(2) + 'px';
   rows.forEach((r, i) => r.classList.toggle('short', (widths[i] * size) / 100 < availW * 0.85));
+  page.dataset.slack = Math.max(0, availW - (maxW * size) / 100); // largeur restée vide (écran en paysage)
   // hauteur de page avec laquelle les lignes rempliraient toute la largeur
   return page.clientHeight - availH + 15 * 1.6 * ((100 * availW) / maxW);
 }
@@ -133,7 +134,7 @@ async function openMushaf(host, first, last, inSel, startPage, fitHeight) {
   const book = document.createElement('div');
   book.className = 'mbook';
   host.appendChild(book);
-  const W = host.clientWidth;
+  let W = host.clientWidth;
   let H = host.clientHeight;
   const els = mushaf.pages.map((n, i) => buildMushafPage(n, datas[i], inSel));
   // la bibliothèque tourne les pages comme un livre latin : on inverse l'ordre pour qu'un
@@ -145,6 +146,15 @@ async function openMushaf(host, first, last, inSel, startPage, fitHeight) {
     H = fitHeight(Math.ceil(need));
     els.forEach((el) => { el.style.height = H + 'px'; });
     els.forEach(fitMushafPage);
+  }
+  // écran plus large que haut (iPad en paysage) : l'écriture est limitée par la hauteur ; la page
+  // prend la largeur du texte, centrée, au lieu d'un cadre étiré avec le texte au milieu
+  const slack = Math.min(...els.map((el) => +el.dataset.slack || 0));
+  if (slack > 40 && innerWidth > innerHeight) {
+    W = Math.round(W - slack);
+    els.forEach((el) => { el.style.width = W + 'px'; });
+    els.forEach(fitMushafPage);
+    book.style.marginLeft = Math.floor((host.clientWidth - W) / 2) + 'px';
   }
   const idx = (n) => mushaf.pages.length - 1 - mushaf.pages.indexOf(n);
   mushaf.flip = new St.PageFlip(book, {

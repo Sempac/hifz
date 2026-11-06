@@ -34,6 +34,7 @@ registerProcessor('pcm16k', Pcm16k);`;
 const mic = { stream: null, ctx: null, sink: null };
 
 async function ensureMic() {
+  if (navigator.audioSession) navigator.audioSession.type = 'auto'; // après une écoute en mode « lecture » (iPhone)
   if (!mic.stream) {
     // son brut : les traitements du navigateur (réduction de bruit, volume automatique) altèrent
     // la voix et faussent la reconnaissance des voyelles. Le micro n'envoie rien pendant un rappel,
@@ -45,10 +46,37 @@ async function ensureMic() {
     const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
     await mic.ctx.audioWorklet.addModule(url);
     const node = new AudioWorkletNode(mic.ctx, 'pcm16k');
-    node.port.onmessage = (e) => { if (mic.sink) { mic.sink(e.data); coachFrames(e.data); } };
+    node.port.onmessage = (e) => { if (mic.sink) { const b = boosted(e.data); mic.sink(b); coachFrames(b); } };
     mic.ctx.createMediaStreamSource(mic.stream).connect(node);
   }
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
+}
+
+// iPhone / iPad : le micro donne une voix environ 20 dB plus faible que le S21 (séance du 30/10/2026).
+// Le serveur prend tout ce qui est sous 0,003 (−50 dB) pour du silence : les fins de mots douces
+// risquaient de passer pour des pauses. Volume remonté vers celui du S21 (voix ≈ −18 dB, 95e centile
+// des trames de 50 ms sur 10 s), au plus ×10, réglé doucement, sans saturer.
+const boost = { gain: 1, levels: [] };
+function boosted(buf) {
+  if (!IOS) return buf;
+  for (let i = 0; i + 800 <= buf.length; i += 800) {
+    let s = 0;
+    for (let j = i; j < i + 800; j++) s += buf[j] * buf[j];
+    boost.levels.push(Math.sqrt(s / 800) / 32768);
+  }
+  boost.levels = boost.levels.slice(-200);
+  const v = boost.levels.slice().sort((a, b) => a - b)[Math.floor(boost.levels.length * 0.95)] || 0;
+  if (v > 0.001) boost.gain += (Math.min(10, Math.max(1, 0.125 / v)) - boost.gain) * 0.2;
+  // morceau soudain plus fort : gain réduit tout de suite pour ce morceau (pas de saturation)
+  let peak = 1;
+  for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+  const g = Math.min(boost.gain, Math.max(1, (0.9 * 32768) / peak));
+  const out = new Int16Array(buf.length);
+  for (let i = 0; i < buf.length; i++) {
+    const x = (buf[i] / 32768) * g, a = Math.abs(x);
+    out[i] = Math.sign(x) * (a <= 0.8 ? a : 0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2)) * 32767;
+  }
+  return out;
 }
 
 // Son du signal d'erreur (bip de montre, tic) capté par le micro : remplacé par du silence dans ce qui

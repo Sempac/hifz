@@ -658,6 +658,18 @@ function loadAyahAudio(x, reciter) {
 
 function play(ayahs) {
   stopAudio();
+  if (IOS) {
+    // iPhone / iPad : le son de Web Audio (versets enchaînés) est coupé par le bouton silencieux,
+    // sauf en mode « lecture » (Safari 17+) ; pendant la récitation, le micro le remet en « auto »
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    // le lecteur de la sourate n'a le droit de jouer après le téléchargement du minutage que s'il a
+    // déjà joué pendant un toucher : on le lance ici une fois sur un silence
+    if (!player.surahUnlocked) {
+      player.surahUnlocked = true;
+      surahEl.src = SILENCE;
+      surahEl.play().catch(() => { player.surahUnlocked = false; });
+    }
+  }
   const rep = parseInt($('#repeat').value, 10);
   playlist = ayahs.flatMap((x) => Array(rep).fill(x));
   playIdx = 0;
@@ -1126,8 +1138,12 @@ function updateLens(target) {
   for (const r of rows) { const c = r.cloneNode(true); c.style.width = contentW + 'px'; inner.appendChild(c); }
   lens.hidden = false;
   // largeur : la ligne remplit l'écran (petite marge) ; hauteur : agrandissement choisi
+  // (écran large, iPad en paysage : au plus 1,6 fois la page, loupe centrée sur elle)
+  lens.style.left = lens.style.right = '';
   const lensW = lens.clientWidth;
-  const sx = (lensW - 12) / contentW;
+  const sx = Math.min((lensW - 12) / contentW, Math.max(z, 1.6));
+  const side = Math.max(0, (lensW - 12 - contentW * sx) / 2);
+  lens.style.left = lens.style.right = side + 'px';
   const sy = Math.max(sx, z);
   const lensH = rows.length * f * 1.6 * sy + 8;
   lens.style.height = lensH + 'px';
