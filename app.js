@@ -1627,6 +1627,18 @@ const BASMALA_WORDS = ['بسم', 'الله', 'الرحمن', 'الرحيم'];
 // Fait avancer l'état avec les mots entendus (raw : les mêmes, tels qu'écrits, avec voyelles).
 // stops : indices des mots entendus suivis d'une pause (voyelle finale non exigée).
 // open : texte provisoire du serveur (morceau en cours), son dernier mot est peut-être coupé
+// lettres isolées du début de 29 sourates (يس، الم، حم، كهيعص…) : écrites en lettres, récitées par
+// leur nom ; « يَا سِين » était refusé pour « يس » à chaque essai (06/11/2026)
+const LETTER_NAMES = { ا: 'الف', ل: 'لام', م: 'ميم', ص: 'صاد', ر: 'را', ك: 'كاف', ه: 'ها', ي: 'يا', ع: 'عين', ط: 'طا', س: 'سين', ح: 'حا', ق: 'قاف', ن: 'نون' };
+const OPENING_LETTERS = new Set([2, 3, 7, 10, 11, 12, 13, 14, 15, 19, 20, 26, 27, 28, 29, 30, 31, 32, 36, 38, 40, 41, 42, 43, 44, 45, 46, 50, 68]);
+function spokenOf(e) {
+  if (e.spoken === undefined) {
+    const opening = e.k === 0 && ((e.ayah === 1 && OPENING_LETTERS.has(e.s)) || (e.s === 42 && e.ayah === 2));
+    e.spoken = opening && [...e.norm].every((c) => LETTER_NAMES[c]) ? [...e.norm].map((c) => LETTER_NAMES[c]).join('') : null;
+  }
+  return e.spoken;
+}
+
 function align(st, heard, raw = [], stops = new Set(), open = false) {
   const E = rec.words, N = E.length;
   // un mot du texte qui vient juste après (8 mots) : lu en avance ou mal placé par le modèle,
@@ -1635,6 +1647,34 @@ function align(st, heard, raw = [], stops = new Set(), open = false) {
   for (let i = 0; i < heard.length && st.pos < N; i++) {
     const w = heard[i];
     const p = st.pos;
+    // lettres du début de sourate (« يس » dit « يا سين ») : comparées à leur nom, sur 1 à 4 morceaux
+    const sp = spokenOf(E[p]);
+    if (sp && w !== E[p].norm) {
+      let best = null;
+      for (let k = 1; k <= 4 && i + k <= heard.length; k++) {
+        const d = lev(heard.slice(i, i + k).join(''), sp);
+        if (d <= Math.max(1, Math.round(sp.length * 0.3)) && (!best || d < best.d)) best = { k, d };
+      }
+      if (best) { advanceOk(st, p); i += best.k - 1; continue; }
+      // nom collé au mot suivant (« يَا سينقرْآنِ ») : la fin du dernier morceau est ce mot suivant
+      const ne = p + 1 < E.length ? E[p + 1].norm : '';
+      for (let k = 1; !best && ne && k <= 4 && i + k <= heard.length; k++) {
+        const j = heard.slice(i, i + k).join(''), lastLen = heard[i + k - 1].length;
+        for (let cut = Math.max(j.length - lastLen + 1, sp.length - 1); cut <= sp.length + 1 && cut < j.length; cut++) {
+          const rem = j.slice(cut);
+          if (rem.length >= 2 && lev(j.slice(0, cut), sp) <= Math.max(1, Math.round(sp.length * 0.3)) && (same(rem, ne) || ne.endsWith(rem))) { best = { k, rem }; break; }
+        }
+      }
+      // (niveau souple : début du mot suivant avalé dans la liaison, « يس وَالْقُرْآنِ » entendu « يَا سينقرْآنِ »)
+      if (best && best.rem !== ne && !same(best.rem, ne) && LEVELS[rec.level].lenient) { markOk(st, p); advanceOk(st, p + 1); i += best.k - 1; continue; }
+      if (best) { advanceOk(st, p); const t = i + best.k - 1;
+        heard = [...heard.slice(0, t), best.rem, ...heard.slice(t + 1)]; raw = [...raw.slice(0, t), best.rem, ...raw.slice(t + 1)];
+        i = t - 1; continue;
+      }
+      // texte provisoire : début du nom seulement (« يا »), la suite arrive
+      const rest = heard.slice(i).join('');
+      if (open && rest.length < sp.length && lev(rest, sp.slice(0, rest.length)) <= 1) break;
+    }
     // lettre isolée (bruit, fin du son d'un rappel) : ignorée, sauf si c'est le mot attendu (ق، ص، ن)
     // (ou « مِنْ » assimilé : « م » devant « رَبِّهِمْ »)
     if (w.length <= 1 && E[p].norm.length > 1 && !nunAlone(w, p)) continue;
@@ -1849,7 +1889,7 @@ function recut(heard, raw, stops, pron, p0) {
   heard.forEach((w, t) => { for (let k = 0; k < w.length; k++) H.push({ c: w[k], t, k }); });
   // lettres attendues, sur une fenêtre assez large pour tout ce qui a été entendu
   const X = [];
-  for (let j = p0; j < E.length && X.length < H.length * 2 + 60; j++) for (const c of E[j].norm) X.push({ c, j });
+  for (let j = p0; j < E.length && X.length < H.length * 2 + 60; j++) for (const c of spokenOf(E[j]) || E[j].norm) X.push({ c, j });
   const n = H.length, m = X.length;
   if ((n + 1) * (m + 1) > 8e6) return keep;
   // alignement : chaque lettre en plus, en moins ou différente coûte 1 ; la fin du texte attendu est
@@ -1914,7 +1954,7 @@ function recut(heard, raw, stops, pron, p0) {
     const piece = (g) => H.slice(g.start, g.end).map((h) => h.c).join('');
     const exactly = zn.groups.length === zn.z - zn.a + 1 && zn.groups.every((g, q) => H[g.start].t === zn.a + q && H[g.start].k === 0 && g.end - g.start === heard[zn.a + q].length);
     const words = new Set(zn.groups.map((g) => g.j));
-    const ok = !exactly && zn.groups.every((g) => g.j >= 0 && same(piece(g), E[g.j].norm))
+    const ok = !exactly && zn.groups.every((g) => g.j >= 0 && same(piece(g), spokenOf(E[g.j]) || E[g.j].norm))
       && zn.groups.every((g) => cuts[H[g.start].t] && cuts[H[g.end - 1].t])
       && !Array.from({ length: zn.z - zn.a + 1 }, (_, q) => heard[zn.a + q]).some((w) => [...words].some((j) => w === E[j].norm || isLearned(w, E[j].norm)));
     if (!ok) { for (let t = zn.a; t <= zn.z; t++) pushOrig(t); continue; }
