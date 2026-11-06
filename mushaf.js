@@ -6,6 +6,10 @@
 // Les pages se tournent comme un livre arabe : glisser de gauche à droite = page suivante.
 
 const MUSHAF_FONT = (n) => `https://static.qurancdn.com/fonts/quran/hafs/v2/woff2/p${n}.woff2`;
+// Même police avec les couleurs du tajwid (édition v4 de Quran.com : mêmes codes de mots que la v2,
+// couleurs dans la police, format COLR lu par Chrome et Safari). Seulement en Lire / Écouter : en
+// Hifz, les mots cachés et les couleurs juste/faux demandent une police d'une seule couleur.
+const MUSHAF_FONT_TAJWEED = (n) => `https://verses.quran.com/fonts/quran/hafs/v4/colrv1/woff2/p${n}.woff2`;
 const BASMALA = 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ';
 
 const mushaf = {
@@ -14,7 +18,9 @@ const mushaf = {
   flip: null,        // livre (bibliothèque page-flip)
   pages: [],         // numéros des pages du livre, dans l'ordre de lecture
   onFlip: null,      // appelé avec le numéro de la page affichée
+  tajweed: false,    // livre ouvert avec la police en couleurs du tajwid
 };
+const mushafFamily = (n) => (mushaf.tajweed ? `qpct${n}` : `qpc${n}`);
 
 const mushafPageData = (n) => {
   if (!mushaf.data.has(n)) mushaf.data.set(n, fetch(`data/pages/${pad3(n)}.json`).then((r) => r.json()));
@@ -22,11 +28,12 @@ const mushafPageData = (n) => {
 };
 
 const mushafFont = (n) => {
-  if (!mushaf.fonts.has(n)) {
-    const f = new FontFace(`qpc${n}`, `url(${MUSHAF_FONT(n)})`);
-    mushaf.fonts.set(n, f.load().then((ff) => { document.fonts.add(ff); }).catch(() => {}));
+  const family = mushafFamily(n);
+  if (!mushaf.fonts.has(family)) {
+    const f = new FontFace(family, `url(${mushaf.tajweed ? MUSHAF_FONT_TAJWEED(n) : MUSHAF_FONT(n)})`);
+    mushaf.fonts.set(family, f.load().then((ff) => { document.fonts.add(ff); }).catch(() => {}));
   }
-  return mushaf.fonts.get(n);
+  return mushaf.fonts.get(family);
 };
 
 // Cartouche de marge au début d'un verset : début de hizb (avec le juz quand il commence),
@@ -43,7 +50,7 @@ function hizbMark(s, a) {
 // Construit l'élément d'une page. inSel(s, a) : le verset fait-il partie de la sélection ?
 function buildMushafPage(n, data, inSel) {
   const page = document.createElement('div');
-  page.className = 'mpage';
+  page.className = 'mpage' + (n <= 2 ? ' opening' : ''); // Fatiha et début de Baqara : grand cadre orné
   page.dataset.page = n;
   // la bibliothèque impose son propre affichage à la page : la mise en page est dans un conteneur intérieur
   const inner = document.createElement('div');
@@ -69,7 +76,7 @@ function buildMushafPage(n, data, inSel) {
       for (const [, glyph, s, a, pos] of byLine[l] || []) {
         const span = document.createElement('span');
         span.className = 'mw' + (pos ? '' : ' end') + (inSel(s, a) ? '' : ' out');
-        span.style.fontFamily = `qpc${n}`;
+        span.style.fontFamily = mushafFamily(n);
         span.textContent = glyph;
         span.dataset.k = `${s}:${a}`;
         if (pos) span.dataset.w = `${s}:${a}:${pos}`;

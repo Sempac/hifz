@@ -136,6 +136,17 @@
     <p id="learn-msg" class="notice float-msg" hidden></p>
     <div id="learn-text" class="mushaf" dir="rtl" lang="ar"></div>
     <div id="learn-book" class="book-host" hidden></div>
+    <!-- légende des couleurs du tajwid (police en couleurs du mode Lire) -->
+    <div id="tajweed-legend" class="tj-legend" dir="rtl" lang="ar" hidden>
+      <span><i style="background:#b50000"></i>مدّ ٦ حركات لزومًا</span>
+      <span><i style="background:#f40000"></i>مدّ واجب ٤ أو ٥ حركات</span>
+      <span><i style="background:#ff7b00"></i>مدّ ٢ أو ٤ أو ٦ جوازًا</span>
+      <span><i style="background:#ce9e00"></i>مدّ حركتان</span>
+      <span><i style="background:#09b000"></i>إخفاء ومواقع الغنّة</span>
+      <span><i style="background:#a5a5a5"></i>إدغام وما لا يُلفظ</span>
+      <span><i style="background:#3f48e6"></i>تفخيم</span>
+      <span><i style="background:#2fadff"></i>قلقلة</span>
+    </div>
     <div class="ffoot"><span class="cart c-page"></span><span class="cart c-rub" dir="rtl"></span></div>
     <button class="back corner tl" aria-label="Retour">←</button>
     <button id="learn-gear" class="corner tr" aria-label="Réglages">⚙</button>
@@ -172,6 +183,7 @@
         <p class="sel-help">Touchez un verset dans la page pour l'écouter ; ▶ en bas à gauche écoute tout.</p>
         <button id="btn-record" class="btn">⏺ Enregistrer ma récitation</button>
         <label class="opt"><input type="checkbox" class="opt-night"> 🌙 Mushaf sombre (lecture la nuit)</label>
+        <label class="opt"><input type="checkbox" id="opt-tajweed"> 🎨 Couleurs du tajwid (avec la légende sous la page)</label>
         <button id="btn-view" class="btn">≡ Affichage texte</button>
         <p class="sel-help" id="learn-version"></p>        <button class="btn primary sheet-close">Fermer</button>
       </div>
@@ -299,7 +311,7 @@
           <pre id="mic-log"></pre>
         </details>
         <p class="sel-help recite-only" id="recite-title"></p>
-        <p class="sel-help" id="app-version">Version 80</p>
+        <p class="sel-help" id="app-version">Version 81</p>
         <button id="settings-close" class="btn primary sheet-close">Fermer</button>
       </div>
     </div>

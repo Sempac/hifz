@@ -285,13 +285,33 @@ body {
 .cart:empty { visibility: hidden; }
 .c-page { min-width: 54px; }
 /* zone de la page (livre ou texte) : bordure ornée comme un mushaf imprimé (dessin dans --band-img) */
-.framed .book-host, .framed > .mushaf {
-  flex: 1; min-height: 0; margin: 0;
-  border: 16px solid var(--band); border-image: var(--band-img) 16 round; background: var(--page);
+.framed .book-host, .framed > .mushaf { flex: 1; min-height: 0; margin: 0; background: var(--page); }
+.framed > .mushaf { border: 16px solid var(--band); border-image: var(--band-img) 16 round; overflow-y: auto; color: var(--page-ink); }
+.book-host { overflow: hidden; }
+/* Livre (06/11/2026, v81) : chaque page porte son propre cadre et tourne avec lui, comme un mushaf
+   imprimé. Pages ordinaires : bande vert pâle à tresse dorée et verte, coins à rosace, filets doré
+   et rouge ; Fatiha et début de Baqara : grand cadre bleu à arcades et fleurs roses. Dessins maison. */
+.mpage .minner {
+  --bw: clamp(14px, 3.4vw, 34px);
+  margin: 4px; height: calc(100% - 8px); /* (marge : le cartouche de hizb, plus large que la bande, reste visible) */
+  border: var(--bw) solid #e8f3e6; border-image: var(--frame-img) 16 round;
 }
-.framed > .mushaf { overflow-y: auto; color: var(--page-ink); }
-/* visible : le cartouche de hizb déborde de la page, posé sur le filet doré de la bordure */
-.book-host { overflow: visible; }
+.mpage.opening .minner {
+  --bw: clamp(26px, 8vw, 84px);
+  margin: 2%; height: 96%; border-image: var(--frame-open-img) 22 round;
+}
+:root {
+  --frame-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' fill='%23e8f3e6'/><rect x='.8' y='.8' width='46.4' height='46.4' fill='none' stroke='%23b8892f' stroke-width='1.6'/><rect x='3' y='3' width='42' height='42' fill='none' stroke='%232f7d57' stroke-width='.6'/><rect x='13.2' y='13.2' width='21.6' height='21.6' fill='none' stroke='%23c0392b' stroke-width='.8'/><rect x='15.2' y='15.2' width='17.6' height='17.6' fill='none' stroke='%23b8892f' stroke-width='1.4'/><g id='m' fill='none' stroke-width='1.3'><path d='M16 8q4-5 8 0t8 0' stroke='%23b8892f'/><path d='M16 8q4 5 8 0t8 0' stroke='%232f7d57'/><circle cx='20' cy='8' r='1.1' fill='%23c0392b' stroke='none'/><circle cx='28' cy='8' r='1.1' fill='%23c0392b' stroke='none'/></g><use href='%23m' transform='rotate(90 24 24)'/><use href='%23m' transform='rotate(180 24 24)'/><use href='%23m' transform='rotate(270 24 24)'/><g id='c'><circle cx='8' cy='8' r='4.6' fill='%23f6e7b8' stroke='%23b8892f' stroke-width='1.1'/><path d='M8 4.2v7.6M4.2 8h7.6' stroke='%232f7d57' stroke-width='1.2'/><circle cx='8' cy='8' r='1.4' fill='%23c0392b'/></g><use href='%23c' x='32'/><use href='%23c' y='32'/><use href='%23c' x='32' y='32'/></svg>");
+  --frame-open-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect width='64' height='64' fill='%231f6fb8'/><rect x='1' y='1' width='62' height='62' fill='none' stroke='%23d9a521' stroke-width='2'/><rect x='18.6' y='18.6' width='26.8' height='26.8' fill='none' stroke='%23f48fb1' stroke-width='1.6'/><rect x='21' y='21' width='22' height='22' fill='none' stroke='%23c62828' stroke-width='1.6'/><g id='m'><path d='M22 18Q32 1 42 18Z' fill='%2343a047' stroke='%23d9a521' stroke-width='1.2'/><path d='M32 5C36.5 9 36.5 13.5 32 16.5C27.5 13.5 27.5 9 32 5Z' fill='%23ec407a' stroke='%23d9a521' stroke-width='.8'/><ellipse cx='28.6' cy='13.6' rx='1.4' ry='3' transform='rotate(-35 28.6 13.6)' fill='%23f8bbd0'/><ellipse cx='35.4' cy='13.6' rx='1.4' ry='3' transform='rotate(35 35.4 13.6)' fill='%23f8bbd0'/><circle cx='32' cy='11' r='1.1' fill='%23ffe082'/><circle cx='22' cy='7' r='1.6' fill='%23d9a521'/><circle cx='42' cy='7' r='1.6' fill='%23d9a521'/></g><use href='%23m' transform='rotate(90 32 32)'/><use href='%23m' transform='rotate(180 32 32)'/><use href='%23m' transform='rotate(270 32 32)'/><g id='c'><circle cx='11' cy='11' r='8.4' fill='%23d9a521' stroke='%232e7d32' stroke-width='1.2'/><circle cx='11' cy='11' r='5.2' fill='%23ec407a' stroke='%23fff3c4' stroke-width='.8'/><path d='M11 6.2v9.6M6.2 11h9.6' stroke='%23fff3c4' stroke-width='1.1'/><circle cx='11' cy='11' r='1.8' fill='%231f6fb8'/></g><use href='%23c' x='42'/><use href='%23c' y='42'/><use href='%23c' x='42' y='42'/></svg>");
+}
+/* légende des couleurs du tajwid, sous la page (mode Lire) */
+.tj-legend {
+  flex: none; display: grid; grid-template-columns: repeat(4, auto); justify-content: center; gap: 1px 10px;
+  padding: 3px 4px 0; font-family: "Amiri Quran", serif; font-size: clamp(9px, 1.6vw, 15px); line-height: 1.5; color: var(--page-ink);
+}
+.tj-legend[hidden] { display: none; }
+.tj-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.tj-legend i { width: .8em; height: .8em; border-radius: 50%; flex: none; }
 .mbook { margin: 0 auto; }
 /* loupe : bandeau agrandi sur la ligne en cours, qui peut déborder du cadre */
 .lens {
@@ -307,8 +327,6 @@ body {
 /* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */
 .mbook, #recite-text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
-/* page posée (pas en train de tourner) : le cartouche de hizb peut déborder sur la bordure */
-.book-host .mpage, .book-host .stf__block, .book-host .stf__wrapper, .book-host .stf__parent { overflow: visible !important; }
 
 /* boutons ronds dans les coins, posés sur le cadre */
 .corner {
@@ -545,7 +563,8 @@ body {
 .mline.head + .mline.basm { margin-top: -.75em; }
 /* cartouche de hizb sur le filet doré intérieur de la bordure (côté gauche) */
 .hmark {
-  position: absolute; left: -20px; top: 50%; transform: translateY(-50%); width: 18px; z-index: 2;
+  /* centré sur la bande du cadre de la page (largeur --bw) */
+  position: absolute; left: calc(-3px - var(--bw) / 2 - 9px); top: 50%; transform: translateY(-50%); width: 18px; z-index: 2;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   padding: 3px 0; overflow: hidden;
   border: 1px solid var(--gold); border-radius: 6px; background: var(--page);

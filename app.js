@@ -499,13 +499,15 @@ async function applyLearnView(startPage) {
   $('#learn-text').hidden = paged;
   $('#learn-book').hidden = !paged;
   const f = current.ayahs[0];
-  if (!paged) { closeMushaf(); updateFrame('learn', QURAN[f.s - 1].p[f.a - 1]); return; }
+  if (!paged) { closeMushaf(); $('#tajweed-legend').hidden = true; updateFrame('learn', QURAN[f.s - 1].p[f.a - 1]); return; }
   const host = $('#learn-book');
   const keys = new Set(current.ayahs.map(ayahKey));
   const [first, last] = await selectionPages();
   await document.fonts.ready; // le cadre a sa taille définitive
   await nextFrame();
   mushaf.onFlip = (n) => updateFrame('learn', n);
+  mushaf.tajweed = store.get('tajweed', true); // couleurs du tajwid (⚙ du mode Lire)
+  $('#tajweed-legend').hidden = !mushaf.tajweed;
   await openMushaf(host, first, last, (s, a) => keys.has(`${s}:${a}`), startPage || first);
   updateFrame('learn', mushafCurrentPage());
 }
@@ -528,6 +530,12 @@ function markBookAyah(key, cls) {
   const p = mushafPageOf(`.mw[data-k="${key}"]`);
   if (p) mushafGoto(p);
 }
+
+$('#opt-tajweed').checked = store.get('tajweed', true);
+$('#opt-tajweed').addEventListener('change', () => {
+  store.set('tajweed', $('#opt-tajweed').checked);
+  if (learnView === 'page' && mushaf.flip) applyLearnView(mushafCurrentPage());
+});
 
 $('#btn-view').addEventListener('click', () => {
   learnView = learnView === 'page' ? 'text' : 'page';
@@ -1040,6 +1048,7 @@ async function applyReciteView(startPage) {
     updateFrame('recite', n, w && QURAN[w.s - 1].p[w.ayah - 1] === n ? QURAN[w.s - 1].q[w.ayah - 1] : 0);
     setTimeout(() => updateLens(rec.lensTarget), 60);
   };
+  mushaf.tajweed = false; // Hifz : mots cachés et couleurs juste/faux → police d'une seule couleur
   await openMushaf($('#recite-book'), first, last, (s, a) => keys.has(`${s}:${a}`), startPage || QURAN[w0.s - 1].p[w0.ayah - 1], fitReciteBook);
   rec.glyph = rec.words.map((w) => {
     const pos = WBW[`${w.s}:${w.ayah}`]?.[w.k] ?? w.k + 1;
@@ -2334,7 +2343,9 @@ function checkReplay(st, final) {
   for (let i = lo; i < st.pos; i++) {
     const m = markOf(st, i);
     if ((m !== 'bad' && m !== 'unsure') || (rec.retries[i] || 0) >= repriseMax() || rec.noReplay.has(i)) continue;
-    const missing = server && errorKind(st, i) === 'forgot';
+    // (de même pour une voyelle fausse : le texte provisoire se trompait de voyelle et le définitif
+    // avait la bonne, 6 rappels injustes sur 19 le 05/11/2026 à 23h33)
+    const missing = server && (errorKind(st, i) === 'forgot' || !!st.vow[i]);
     if (i < from && !missing) continue;
     if (missing && !final) continue;
     if (settling && (m !== 'bad' || i < rec.lastReplayAt)) continue;
