@@ -62,10 +62,20 @@ const LEVELS = {
   3: { tol: 0.5, extra: 3, unsure: 1, shortOk: true, insMin: 3, lenient: true },
 };
 
+// a et b ne diffèrent que par le « و » / « ف » du début (l'un pour l'autre, ajouté ou oublié) : faute
+// de mémoire, pas une transcription approximative (07/11/2026 : « فَكُلَا » dit exprès pour « وَكُلَا »,
+// compté juste au niveau souple). Le serveur ne rend le mot attendu que si le modèle hésitait vraiment.
+function conjChange(a, b) {
+  if (a.length === b.length) return a.length > 2 && a[0] !== b[0] && 'وف'.includes(a[0]) && 'وف'.includes(b[0]) && a.slice(1) === b.slice(1);
+  const [s, l] = a.length < b.length ? [a, b] : [b, a];
+  return s.length >= 2 && 'وف'.includes(l[0]) && l.slice(1) === s;
+}
+
 // Deux mots sont considérés identiques s'ils diffèrent d'au plus une part des lettres
 // (la reconnaissance vocale n'est pas parfaite). Les mots très courts doivent être exacts.
 function same(a, b) {
   if (a === b) return true;
+  if (rec.engine === 'server' && conjChange(a, b)) return false; // texte du serveur fiable : « و » ≠ « ف »
   // l'article « ال » commun ne doit pas compter dans la ressemblance (الدنيا ≠ الرحيم)
   if (a.startsWith('ال') && b.startsWith('ال') && a.length > 3 && b.length > 3) { a = a.slice(2); b = b.slice(2); }
   if (Math.min(a.length, b.length) <= 2) return false;
