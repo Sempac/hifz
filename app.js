@@ -2832,6 +2832,7 @@ function autoPause(text, newWords) {
   const share = R.filter((x) => x.q).length / R.length;
   if (share >= NOISE_QURAN_SHARE) return false;
   micLog(`pause automatique : ${Math.round(share * 100)} % de mots du Coran sur ${R.length} mots entendus`);
+  window.sendReport?.(['Pause automatique (pas de récitation reconnue)', '', 'Journal du micro :', ...micLines].join('\n'));
   stopListening();
   rec.recentHeard = [];
   $('#fix').hidden = true;

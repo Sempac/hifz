@@ -7,10 +7,13 @@
 // reconnaissance du navigateur (start, abort, onresult, onend…) : le reste de l'application
 // fonctionne sans changement.
 
-// Conversion du micro en 16 kHz mono, morceaux de 200 ms (traitement audio en arrière-plan)
+// Conversion du micro en 16 kHz mono, morceaux de 200 ms (traitement audio en arrière-plan).
+// Envoyé en nombres à virgule : la conversion en 16 bits se fait après le gain (boosted). Avant v88,
+// elle se faisait ici, avant le gain : le son très faible de l'iPad (quelques unités sur 32768) était
+// réduit à des marches, ×10 ensuite, avec 35 à 47 % d'échantillons à zéro (« الم » entendu « الطارون »).
 const PCM_WORKLET = `
 class Pcm16k extends AudioWorkletProcessor {
-  constructor() { super(); this.ratio = sampleRate / 16000; this.t = 0; this.acc = 0; this.cnt = 0; this.buf = new Int16Array(3200); this.n = 0; }
+  constructor() { super(); this.ratio = sampleRate / 16000; this.t = 0; this.acc = 0; this.cnt = 0; this.buf = new Float32Array(3200); this.n = 0; }
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
     if (!ch) return true;
@@ -20,7 +23,7 @@ class Pcm16k extends AudioWorkletProcessor {
         this.t -= this.ratio;
         const v = Math.max(-1, Math.min(1, this.acc / this.cnt));
         this.acc = 0; this.cnt = 0;
-        this.buf[this.n++] = v * 32767;
+        this.buf[this.n++] = v;
         if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
       }
     }
@@ -46,7 +49,9 @@ async function ensureMic() {
     // absolu, voix d'un niveau plat, « الم » entendu « الطارون », 07/11/2026) : dans le journal du micro
     try {
       const t = mic.stream.getAudioTracks()[0], g = t.getSettings();
-      window.micLog?.(`micro : ${t.label || '?'} · écho ${g.echoCancellation} · bruit ${g.noiseSuppression} · volume auto ${g.autoGainControl} · ${g.sampleRate || '?'} Hz`);
+      const line = `micro : ${t.label || '?'} · écho ${g.echoCancellation} · bruit ${g.noiseSuppression} · volume auto ${g.autoGainControl} · ${g.sampleRate || '?'} Hz`;
+      window.micLog?.(line);
+      sendReport(`Réglages du micro (${navigator.userAgent.slice(0, 80)}) : ${line}`); // tout de suite au diagnostic (v88)
     } catch { /* pas de réglages lisibles */ }
     mic.ctx = new (window.AudioContext || window.webkitAudioContext)();
     const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
@@ -62,30 +67,31 @@ async function ensureMic() {
 // 07/11/2026 ; appliqué à tous les appareils depuis v85 : l'iPad envoyait encore −41 dB en v84).
 // Le serveur prend tout ce qui est sous 0,003 (−50 dB) pour du silence : les fins de mots douces
 // risquaient de passer pour des pauses. Volume remonté vers celui du S21 (voix ≈ −18 dB, 95e centile
-// des trames de 50 ms sur 10 s), au plus ×10, réglé doucement, sans saturer.
+// des trames de 50 ms sur 10 s), au plus ×20 (×10 avant v88 : l'iPad restait à −30 dB), réglé
+// doucement, sans saturer. buf : nombres entre −1 et 1 (worklet) ; renvoie le son en 16 bits.
 const boost = { gain: 1, levels: [] };
 function boosted(buf) {
   for (let i = 0; i + 800 <= buf.length; i += 800) {
     let s = 0;
     for (let j = i; j < i + 800; j++) s += buf[j] * buf[j];
-    boost.levels.push(Math.sqrt(s / 800) / 32768);
+    boost.levels.push(Math.sqrt(s / 800));
   }
   boost.levels = boost.levels.slice(-200);
   const v = boost.levels.slice().sort((a, b) => a - b)[Math.floor(boost.levels.length * 0.95)] || 0;
-  if (v > 0.001) boost.gain += (Math.min(10, Math.max(1, 0.125 / v)) - boost.gain) * 0.2;
+  if (v > 0.0005) boost.gain += (Math.min(20, Math.max(1, 0.125 / v)) - boost.gain) * 0.2;
   // dans le journal du micro (bilan envoyé au serveur) : on voit le gain réellement appliqué
   if (Date.now() - (boost.logged || 0) > 10000 && Math.abs(boost.gain - (boost.loggedGain || 1)) > 0.3) {
     boost.logged = Date.now(); boost.loggedGain = boost.gain;
     window.micLog?.(`volume du micro ×${boost.gain.toFixed(1)}`);
   }
   // morceau soudain plus fort : gain réduit tout de suite pour ce morceau (pas de saturation)
-  let peak = 1;
+  let peak = 1 / 32768;
   for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
-  const g = Math.min(boost.gain, Math.max(1, (0.9 * 32768) / peak));
+  const g = Math.min(boost.gain, Math.max(1, 0.9 / peak));
   const out = new Int16Array(buf.length);
   for (let i = 0; i < buf.length; i++) {
-    const x = (buf[i] / 32768) * g, a = Math.abs(x);
-    out[i] = Math.sign(x) * (a <= 0.8 ? a : 0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2)) * 32767;
+    const x = buf[i] * g, a = Math.abs(x);
+    out[i] = Math.round(Math.sign(x) * (a <= 0.8 ? a : 0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2)) * 32767);
   }
   return out;
 }
