@@ -162,10 +162,49 @@ async function openMushaf(host, first, last, inSel, startPage, fitHeight) {
     drawShadow: true, maxShadowOpacity: 0.35, flippingTime: 700,
     mobileScrollSupport: false, swipeDistance: 25, clickEventForward: true,
     disableFlipByClick: true, showPageCorners: false,
+    // glissement géré par nous (v91) : celui de la bibliothèque ne tournait la page que pour un geste
+    // de moins de 250 ms, sinon il fallait tirer la page jusqu'au milieu en appuyant
+    useMouseEvents: false,
     startPage: idx(startPage && mushaf.pages.includes(startPage) ? startPage : first),
   });
   mushaf.flip.loadFromHTML(reversed);
-  mushaf.flip.on('flip', (e) => { if (mushaf.onFlip) mushaf.onFlip(mushaf.pages[mushaf.pages.length - 1 - e.data]); });
+  mushaf.flip.on('flip', (e) => { updateMushafNav(); if (mushaf.onFlip) mushaf.onFlip(mushaf.pages[mushaf.pages.length - 1 - e.data]); });
+  addMushafNav(host, book);
+}
+
+// Page suivante (+1) ou précédente (−1) dans l'ordre de lecture
+function mushafStep(d) {
+  if (!mushaf.flip || mushaf.flip.getState?.() === 'flipping') return;
+  mushafGoto(mushafCurrentPage() + d);
+}
+
+// Glissement du doigt (n'importe quelle vitesse, dès 35 px à l'horizontale) et deux flèches en bas :
+// de gauche à droite ou flèche de gauche = page suivante (livre arabe), l'inverse = page précédente
+function addMushafNav(host, book) {
+  let t0 = null;
+  book.addEventListener('touchstart', (e) => { t0 = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+  book.addEventListener('touchend', (e) => {
+    if (!t0) return;
+    const dx = e.changedTouches[0].clientX - t0.x, dy = e.changedTouches[0].clientY - t0.y;
+    t0 = null;
+    if (Math.abs(dx) >= 35 && Math.abs(dx) > 1.5 * Math.abs(dy)) mushafStep(dx > 0 ? 1 : -1);
+  }, { passive: true });
+  if (mushaf.pages.length < 2) return;
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+  const nav = document.createElement('div');
+  nav.className = 'mnav';
+  nav.innerHTML = '<button type="button" class="mnav-next" aria-label="Page suivante">❮</button>'
+    + '<button type="button" class="mnav-prev" aria-label="Page précédente">❯</button>';
+  nav.querySelector('.mnav-next').addEventListener('click', (e) => { e.stopPropagation(); mushafStep(1); });
+  nav.querySelector('.mnav-prev').addEventListener('click', (e) => { e.stopPropagation(); mushafStep(-1); });
+  host.appendChild(nav);
+  updateMushafNav();
+}
+
+function updateMushafNav() {
+  const cur = mushafCurrentPage();
+  document.querySelectorAll('.mnav-next').forEach((b) => { b.disabled = cur >= mushaf.pages.at(-1); });
+  document.querySelectorAll('.mnav-prev').forEach((b) => { b.disabled = cur <= mushaf.pages[0]; });
 }
 
 function closeMushaf() {

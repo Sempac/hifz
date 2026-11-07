@@ -313,6 +313,16 @@ body {
 .tj-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .tj-legend i { width: .8em; height: .8em; border-radius: 50%; flex: none; }
 .mbook { margin: 0 auto; }
+/* flèches pour tourner la page (v91), en bas du livre : à gauche la page suivante (livre arabe) */
+.mnav { position: absolute; left: calc(20px + 2%); right: calc(20px + 2%); bottom: 16px; z-index: 4; display: flex; justify-content: space-between; pointer-events: none; }
+.mnav button {
+  pointer-events: auto; width: 50px; height: 50px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--page-ink) 35%, transparent);
+  background: color-mix(in srgb, var(--page) 40%, transparent); color: var(--page-ink); font-size: 24px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; opacity: .75; cursor: pointer;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); touch-action: manipulation;
+}
+.mnav button:active { opacity: 1; transform: scale(.94); }
+.mnav button:disabled { opacity: .2; }
 /* loupe : bandeau agrandi sur la ligne en cours, qui peut déborder du cadre */
 .lens {
   position: fixed; left: 0; right: 0; z-index: 5; overflow: hidden;
