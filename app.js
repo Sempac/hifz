@@ -895,7 +895,9 @@ const rec = {
   phrase: store.get('phrase', /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
   lastEventAt: 0,       // dernière nouvelle de la reconnaissance (chien de garde iPhone / iPad)
   lensZoom: Number(store.get('lensZoom', 1.6)), // loupe sur la ligne en cours (0 = désactivée)
-  engine: store.get('engine', 'device'),   // reconnaissance : 'device' (Google / Apple) ou 'server' (serveur Hifz)
+  // reconnaissance : 'device' (Google / Apple) ou 'server' (serveur Hifz) ; serveur par défaut sur un nouvel
+  // appareil (l'iPad, jamais réglé, restait sur la reconnaissance de Safari, absente : micro grisé, 07/11/2026)
+  engine: store.get('engine', 'server'),
   serverUrl: store.get('serverUrl', ''),   // adresse WebSocket du serveur Hifz
   lensTarget: null,     // mot attendu dans le livre (suivi par la loupe)
   showDelay: store.get('showDelay', false), // afficher l'attente entre deux réponses du micro
@@ -2841,7 +2843,8 @@ const LATE_WORDS = 5;   // mots arrivés d'un coup
 const LATE_MS = 2500;   // attente depuis la réponse précédente
 
 // Reconnaissance utilisable : celle du navigateur, ou le serveur Hifz (si une adresse est réglée)
-const recognitionAvailable = () => (rec.engine === 'server' ? !!rec.serverUrl : !!SR);
+// serveur : toujours disponible, l'adresse est cherchée (annonce du serveur) au toucher du micro
+const recognitionAvailable = () => (rec.engine === 'server' ? true : !!SR);
 
 // Le serveur Hifz renvoie le texte avec les voyelles : on les vérifie (sauf en Très souple)
 const vowelCheck = () => rec.engine === 'server';
