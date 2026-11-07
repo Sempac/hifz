@@ -52,13 +52,13 @@ async function ensureMic() {
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
 }
 
-// iPhone / iPad : le micro donne une voix environ 20 dB plus faible que le S21 (séance du 30/10/2026).
+// Micro faible (iPhone / iPad : voix environ 20 dB plus faible que le S21, séances du 30/10 et du
+// 07/11/2026 ; appliqué à tous les appareils depuis v85 : l'iPad envoyait encore −41 dB en v84).
 // Le serveur prend tout ce qui est sous 0,003 (−50 dB) pour du silence : les fins de mots douces
 // risquaient de passer pour des pauses. Volume remonté vers celui du S21 (voix ≈ −18 dB, 95e centile
 // des trames de 50 ms sur 10 s), au plus ×10, réglé doucement, sans saturer.
 const boost = { gain: 1, levels: [] };
 function boosted(buf) {
-  if (!IOS) return buf;
   for (let i = 0; i + 800 <= buf.length; i += 800) {
     let s = 0;
     for (let j = i; j < i + 800; j++) s += buf[j] * buf[j];
@@ -67,6 +67,11 @@ function boosted(buf) {
   boost.levels = boost.levels.slice(-200);
   const v = boost.levels.slice().sort((a, b) => a - b)[Math.floor(boost.levels.length * 0.95)] || 0;
   if (v > 0.001) boost.gain += (Math.min(10, Math.max(1, 0.125 / v)) - boost.gain) * 0.2;
+  // dans le journal du micro (bilan envoyé au serveur) : on voit le gain réellement appliqué
+  if (Date.now() - (boost.logged || 0) > 10000 && Math.abs(boost.gain - (boost.loggedGain || 1)) > 0.3) {
+    boost.logged = Date.now(); boost.loggedGain = boost.gain;
+    window.micLog?.(`volume du micro ×${boost.gain.toFixed(1)}`);
+  }
   // morceau soudain plus fort : gain réduit tout de suite pour ce morceau (pas de saturation)
   let peak = 1;
   for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
