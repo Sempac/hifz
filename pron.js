@@ -193,6 +193,11 @@ showFabs();
 $('#ahkam').checked = rec.ahkam;
 $('#ahkam').addEventListener('change', () => { rec.ahkam = $('#ahkam').checked; store.set('ahkam', rec.ahkam); });
 
-// la barre suit la jauge du micro : cachée quand le micro s'arrête
-new MutationObserver(() => { if ($('#vu').hidden) $('#pron').hidden = true; })
+// la barre suit la jauge du micro : visible (vide) dès que le micro écoute, remplie au premier mot
+// juste mesuré (v87 : avant, elle n'apparaissait qu'après ce mot, on la croyait absente), cachée à l'arrêt
+new MutationObserver(() => {
+  const bar = $('#pron');
+  bar.hidden = $('#vu').hidden || rec.engine !== 'server';
+  if (bar.hidden) { bar.className = 'pron'; bar.firstElementChild.style.height = '0'; bar.lastElementChild.innerHTML = ''; }
+})
   .observe($('#vu'), { attributes: true, attributeFilter: ['hidden'] });

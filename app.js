@@ -2694,13 +2694,14 @@ function finish() {
   $('#summary').hidden = false;
   $('#fix').hidden = true;
   $('#talk').scrollTop = 0;
-  // le même bilan en texte, gardé par le serveur avec le diagnostic (plus besoin de capture d'écran)
-  if (first && window.sendReport) {
+  // le même bilan en texte, gardé par le serveur avec le diagnostic (plus besoin de capture d'écran) ;
+  // aussi à l'arrêt du micro : le journal du micro (réglages de l'iPad, volume) arrive même sans fin (v87)
+  if ((first || partial) && window.sendReport) {
     const txt = ({ i, kind, fixed, heard, why, shown }) => `${rec.words[i].text} (${rec.words[i].s}:${rec.words[i].ayah}, mot ${i + 1})`
       + (kind ? ` · ${KIND_LABEL[kind]}` : '') + (heard ? ` (entendu « ${heard} »)` : '') + (why ? ` · ${why}` : '')
       + (fixed ? ' · retrouvé après le bip' : '') + (shown ? ' · mot montré' : '');
     sendReport([
-      `Bilan « ${current.title} » : ${pct} % · ${ok}/${rec.words.length} mots justes du premier coup · niveau ${rec.level}`,
+      `Bilan « ${current.title} »${partial ? ` (micro arrêté au mot ${n})` : ''} : ${pct} % · ${ok}/${rec.words.length} mots justes du premier coup · niveau ${rec.level}`,
       ...memory.map((x) => '🧠 ' + txt(x)), ...pron.map((x) => '🗣 ' + txt(x)), ...misheard.map((x) => '🎙 ' + txt(x)),
       ...letters.map((l) => `🔤 ${l.exp} dite comme ${l.got} : ${l.n} mot(s) sur ${l.withL} (${l.words.map((i) => rec.words[i].text).join(' ')})`),
       ...flagged.map((w) => `🚩 ${w.text} (${w.s}:${w.ayah})`), ...pronSummaryText(),
