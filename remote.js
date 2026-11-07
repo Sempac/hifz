@@ -11,19 +11,40 @@
 // Envoyé en nombres à virgule : la conversion en 16 bits se fait après le gain (boosted). Avant v88,
 // elle se faisait ici, avant le gain : le son très faible de l'iPad (quelques unités sur 32768) était
 // réduit à des marches, ×10 ensuite, avec 35 à 47 % d'échantillons à zéro (« الم » entendu « الطارون »).
+// Cadence réelle du micro (v89) : sur l'iPad, le son arrivait deux fois moins vite que la cadence
+// annoncée (45,8 s de son reçues en 95 s) ; découpé au rythme annoncé, il partait accéléré ×2 au
+// serveur (« الم ذلك الكتاب » entendu « حطارو ذالقت », parfait une fois ralenti). On compte les
+// échantillons reçus par seconde d'horloge, ramenés à la cadence usuelle la plus proche.
 const PCM_WORKLET = `
+const RATES = [8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 96000];
 class Pcm16k extends AudioWorkletProcessor {
-  constructor() { super(); this.ratio = sampleRate / 16000; this.t = 0; this.acc = 0; this.cnt = 0; this.buf = new Float32Array(3200); this.n = 0; }
+  constructor() { super(); this.rate = sampleRate; this.ratio = sampleRate / 16000; this.t = 0; this.acc = 0; this.cnt = 0; this.last = 0; this.buf = new Float32Array(3200); this.n = 0; this.t0 = 0; this.frames = 0; this.checks = 0; }
+  measure(n) {
+    const now = Date.now();
+    if (!this.t0) { this.t0 = now; return; } // le premier bloc ouvre la mesure
+    this.frames += n;
+    const el = (now - this.t0) / 1000;
+    if (el < (this.checks ? 2 : 0.6)) return; // première mesure vite (début de récitation), puis toutes les 2 s
+    const got = this.frames / el;
+    // proche de la cadence annoncée : on la garde (mesure à quelques % près, 44,1 et 48 kHz sont voisins)
+    const r = Math.abs(got - sampleRate) / sampleRate < 0.25 ? sampleRate
+      : RATES.reduce((a, b) => (Math.abs(b - got) < Math.abs(a - got) ? b : a));
+    if (Math.abs(got - r) / r < 0.15 && r !== this.rate) {
+      this.rate = r; this.ratio = r / 16000;
+      this.port.postMessage({ rate: r, nominal: sampleRate });
+    }
+    this.checks++; this.t0 = now; this.frames = 0;
+  }
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
     if (!ch) return true;
+    this.measure(ch.length);
     for (let i = 0; i < ch.length; i++) {
       this.acc += ch[i]; this.cnt++; this.t += 1;
-      if (this.t >= this.ratio) {
+      while (this.t >= this.ratio) { // plusieurs sorties par échantillon si le micro est sous 16 kHz
         this.t -= this.ratio;
-        const v = Math.max(-1, Math.min(1, this.acc / this.cnt));
-        this.acc = 0; this.cnt = 0;
-        this.buf[this.n++] = v;
+        if (this.cnt) { this.last = Math.max(-1, Math.min(1, this.acc / this.cnt)); this.acc = 0; this.cnt = 0; }
+        this.buf[this.n++] = this.last;
         if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
       }
     }
@@ -57,7 +78,9 @@ async function ensureMic() {
     const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
     await mic.ctx.audioWorklet.addModule(url);
     const node = new AudioWorkletNode(mic.ctx, 'pcm16k');
-    node.port.onmessage = (e) => { if (mic.sink) { const b = boosted(e.data); mic.sink(b); coachFrames(b); } };
+    node.port.onmessage = (e) => {
+      if (e.data.rate) { window.micLog?.(`cadence réelle du micro ${e.data.rate} Hz (annoncée ${e.data.nominal} Hz)`); sendReport(`Cadence réelle du micro : ${e.data.rate} Hz (annoncée ${e.data.nominal} Hz)`); return; }
+      if (mic.sink) { const b = boosted(e.data); mic.sink(b); coachFrames(b); } };
     mic.ctx.createMediaStreamSource(mic.stream).connect(node);
   }
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
