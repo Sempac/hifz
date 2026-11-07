@@ -42,6 +42,12 @@ async function ensureMic() {
     mic.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
+    // réglages réellement appliqués par l'appareil (l'iPad envoyait un son traité : 36 % de silence
+    // absolu, voix d'un niveau plat, « الم » entendu « الطارون », 07/11/2026) : dans le journal du micro
+    try {
+      const t = mic.stream.getAudioTracks()[0], g = t.getSettings();
+      window.micLog?.(`micro : ${t.label || '?'} · écho ${g.echoCancellation} · bruit ${g.noiseSuppression} · volume auto ${g.autoGainControl} · ${g.sampleRate || '?'} Hz`);
+    } catch { /* pas de réglages lisibles */ }
     mic.ctx = new (window.AudioContext || window.webkitAudioContext)();
     const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
     await mic.ctx.audioWorklet.addModule(url);
