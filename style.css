@@ -574,12 +574,17 @@ body {
 /* cartouche de hizb sur le filet doré intérieur de la bordure (côté gauche) */
 .hmark {
   /* centré sur la bande du cadre de la page (largeur --bw) */
-  position: absolute; left: calc(-3px - var(--bw) / 2 - 9px); top: 50%; transform: translateY(-50%); width: 18px; z-index: 2;
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 3px 0; overflow: hidden;
+  /* agrandi le 08/11/2026 : un mot par ligne, texte à l'échelle du cadre (8 px au téléphone, 13 px à l'iPad) ;
+     à peine plus large que la bande pour ne pas être coupé au bord de l'écran */
+  --hw: calc(var(--bw) + 6px);
+  position: absolute; left: calc(-3px - var(--bw) / 2 - var(--hw) / 2); top: 50%; transform: translateY(-50%); width: var(--hw); z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  padding: 3px 0; box-sizing: border-box;
   border: 1px solid var(--gold); border-radius: 6px; background: var(--page);
-  font-family: "Amiri Quran", serif; font-size: 6px; line-height: 1.15; color: var(--cart-ink);
+  font-family: "Amiri Quran", serif; font-size: calc(var(--bw) * .38 + 2.5px); line-height: 1.2; color: var(--cart-ink);
 }
+/* ۞ devant le verset qui ouvre un quart de hizb, agrandi sans décaler la ligne */
+.hstar { display: inline-block; transform: scale(1.8); }
 .hmark span { white-space: nowrap; }
 
 /* Labo */

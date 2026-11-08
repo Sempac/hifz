@@ -85,8 +85,11 @@ function buildMushafPage(n, data, inSel) {
           if (mark) {
             const m = document.createElement('span');
             m.className = 'hmark';
-            m.innerHTML = mark.map((t) => `<span>${t}</span>`).join('');
+            m.innerHTML = mark.flatMap((t) => t.split(' ')).map((t) => `<span>${t}</span>`).join(''); // un mot par ligne : cartouche étroit
             row.appendChild(m);
+            // le premier glyphe du mot est le ۞ (« glyphe espace mot ») : agrandi à part (08/11/2026)
+            const sp = glyph.indexOf(' ');
+            if (sp > 0) span.innerHTML = `<span class="hstar">${glyph.slice(0, sp)}</span>${glyph.slice(sp)}`;
           }
         }
         row.appendChild(span);
