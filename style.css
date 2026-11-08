@@ -284,6 +284,25 @@ body {
 }
 .cart:empty { visibility: hidden; }
 .c-page { min-width: 54px; }
+/* lecteur (08/11/2026) : pendant l'écoute, le bas du cadre montre ⏹ et la barre d'avancement */
+.ffoot.playing .cart { display: none; }
+.playbar { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.playbar[hidden] { display: none; }
+.pb-stop {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+  background: var(--page); color: var(--cart-ink); border: 2px solid var(--gold); font-size: 1.05rem; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 4px rgb(0 0 0 / .35); touch-action: manipulation;
+}
+.pb-stop:active { transform: scale(.94); }
+/* la barre se remplit de droite à gauche, dans le sens de la lecture arabe */
+.play-track {
+  flex: 1; height: 10px; border-radius: 5px; position: relative; overflow: hidden; cursor: pointer;
+  background: color-mix(in srgb, var(--gold) 22%, var(--page)); border: 1px solid var(--gold);
+  /* zone de toucher plus haute que la barre */
+  box-shadow: 0 0 0 10px transparent; touch-action: manipulation;
+}
+.play-track i { position: absolute; top: 0; bottom: 0; right: 0; width: 0; background: var(--gold); border-radius: 5px; }
+.play-count { flex: none; font-size: .8rem; color: var(--cart-ink); font-variant-numeric: tabular-nums; }
 /* zone de la page (livre ou texte) : bordure ornée comme un mushaf imprimé (dessin dans --band-img) */
 .framed .book-host, .framed > .mushaf { flex: 1; min-height: 0; margin: 0; background: var(--page); }
 .framed > .mushaf { border: 16px solid var(--band); border-image: var(--band-img) 16 round; overflow-y: auto; color: var(--page-ink); }
@@ -337,6 +356,21 @@ body {
 /* appui long sur un mot : pas de sélection de texte ni de menu du téléphone */
 .mbook, #recite-text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .mpage { overflow: hidden; background: var(--page); color: var(--page-ink); }
+/* côté reliure (08/11/2026) : ombre du pli et fil de couture doré sur le bord intérieur, pour voir
+   sans lire si la page est à droite (impaire, reliure à gauche) ou à gauche (paire, reliure à droite) */
+.mpage::before, .mpage::after { content: ''; position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 1; }
+.mpage::before { width: 12%; background: linear-gradient(to var(--fold-dir), rgb(50 30 5 / .55), rgb(50 30 5 / .22) 30%, rgb(50 30 5 / .06) 70%, transparent); }
+.mpage::after {
+  width: 4px; top: 4px; bottom: 4px; border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, #8a6420 0 10px, transparent 10px 16px);
+  filter: drop-shadow(0 0 1px #f6e7b8);
+}
+.mpage.pright { --fold-dir: right; }
+.mpage.pleft { --fold-dir: left; }
+.mpage.pright::before { left: 0; }
+.mpage.pleft::before { right: 0; }
+.mpage.pright::after { left: 2px; }
+.mpage.pleft::after { right: 2px; }
 
 /* boutons ronds dans les coins, posés sur le cadre */
 .corner {

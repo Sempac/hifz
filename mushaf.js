@@ -50,7 +50,8 @@ function hizbMark(s, a) {
 // Construit l'élément d'une page. inSel(s, a) : le verset fait-il partie de la sélection ?
 function buildMushafPage(n, data, inSel) {
   const page = document.createElement('div');
-  page.className = 'mpage' + (n <= 2 ? ' opening' : ''); // Fatiha et début de Baqara : grand cadre orné
+  // Fatiha et début de Baqara : grand cadre orné ; pages impaires à droite (reliure à leur gauche), paires à gauche
+  page.className = 'mpage' + (n <= 2 ? ' opening' : '') + (n % 2 ? ' pright' : ' pleft');
   page.dataset.page = n;
   // la bibliothèque impose son propre affichage à la page : la mise en page est dans un conteneur intérieur
   const inner = document.createElement('div');

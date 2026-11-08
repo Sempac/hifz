@@ -384,7 +384,7 @@ const MORE_RECITERS = [
   ['Muhammad_Ayyoub_128kbps', 'Muhammad Ayyoub'], ['Muhammad_Jibreel_128kbps', 'Muhammad Jibreel'],
   ['Muhsin_Al_Qasim_192kbps', 'Muhsin Al-Qasim'], // (Mustafa Ismail retiré : versets manquants, ex. 3:13)
   ['Nasser_Alqatami_128kbps', 'Nasser Al-Qatami'], ['Parhizgar_48kbps', 'Parhizgar'],
-  ['Ghamadi_40kbps', 'Saad Al-Ghamdi'], ['Sahl_Yassin_128kbps', 'Sahl Yassin'],
+  ['Sahl_Yassin_128kbps', 'Sahl Yassin'], // (Saad Al-Ghamdi : passé dans la liste courte, 08/11/2026)
   ['Salaah_AbdulRahman_Bukhatir_128kbps', 'Salah Bukhatir'], ['Salah_Al_Budair_128kbps', 'Salah Al-Budair'],
   ['Saood_ash-Shuraym_128kbps', 'Saud Ash-Shuraym'], ['Yaser_Salamah_128kbps', 'Yaser Salamah'],
   ['Yasser_Ad-Dussary_128kbps', 'Yasser Ad-Dussary'],
@@ -611,6 +611,9 @@ function surahTimings(id, s) {
         const at = {};
         for (const v of list) if (v.ayah > 0) at[v.ayah] = [v.start_time / 1000, v.end_time / 1000];
         if (!Object.keys(at).length) throw new Error('minutage vide');
+        // le verset 1 y commence 0,2 à 0,7 s après le début de la voix (Saad Al-Ghamdi, 3:1 : le « ألف »
+        // de الم était coupé, 2:1, 7:1, 112:1 aussi) ; on recule dans le silence qui suit la basmala (08/11/2026)
+        if (at[1]) at[1][0] = Math.max(0, at[1][0] - 0.7);
         return { url: `https://cdn.mp3quran.net/audio/${id[1]}/${pad3(s)}.mp3`, at };
       });
     p.catch(() => surahTimingCache.delete(key));
@@ -683,9 +686,59 @@ function play(ayahs) {
   const rep = parseInt($('#repeat').value, 10);
   playlist = ayahs.flatMap((x) => Array(rep).fill(x));
   playIdx = 0;
+  player.rep = rep;
   $('#btn-play').textContent = '⏸';
+  showPlaybar(true);
   runPlaylist(++player.gen, $('#reciter').value);
 }
+
+// ---------- Lecteur : pause, arrêt, barre d'avancement (08/11/2026) ----------
+// player.cur : verset en cours, pour la barre : { el: fichier de la sourate, a, b } ou { at, len } (horloge Web Audio)
+function showPlaybar(on) {
+  $('#playbar').hidden = !on;
+  $('#playbar').closest('.ffoot').classList.toggle('playing', on);
+  clearInterval(player.tick);
+  if (on) { player.tick = setInterval(updatePlaybar, 200); updatePlaybar(); }
+}
+function updatePlaybar() {
+  if (!playlist.length) return;
+  const c = player.cur;
+  let f = 0;
+  if (c?.el) f = (c.el.currentTime - c.a) / (c.b - c.a);
+  else if (c) f = (audioCtx().currentTime - c.at) / c.len;
+  f = Math.min(1, Math.max(0, f || 0));
+  $('#play-track i').style.width = `${((playIdx + f) / playlist.length) * 100}%`;
+  const rep = player.rep || 1; // compteur en versets (pas en répétitions)
+  $('#play-count').textContent = `${Math.floor(Math.min(playIdx, playlist.length - 1) / rep) + 1}/${Math.ceil(playlist.length / rep)}`;
+}
+function pauseAudio() {
+  if (player.paused) return;
+  player.paused = true;
+  player.surahWasPlaying = !surahEl.paused;
+  surahEl.pause();
+  if (player.ctx) player.ctx.suspend().catch(() => {});
+  $('#btn-play').textContent = '▶';
+}
+function resumeAudio() {
+  if (!player.paused) return;
+  player.paused = false;
+  if (player.ctx) player.ctx.resume().catch(() => {});
+  if (player.surahWasPlaying) surahEl.play().catch(() => {});
+  $('#btn-play').textContent = '⏸';
+}
+// toucher la barre : reprendre au verset à cet endroit (la barre va de droite à gauche)
+$('#play-track').addEventListener('click', (e) => {
+  if (!playlist.length) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const f = Math.min(0.999, Math.max(0, (r.right - e.clientX) / r.width));
+  const list = playlist, i = Math.floor(f * list.length);
+  stopAudio();
+  playlist = list; playIdx = i;
+  $('#btn-play').textContent = '⏸';
+  showPlaybar(true);
+  runPlaylist(++player.gen, $('#reciter').value);
+});
+$('#btn-stop').addEventListener('click', () => stopAudio());
 
 // verset entendu à partir de maintenant : surligné (texte ou livre)
 function showPlaying(x) {
@@ -703,6 +756,11 @@ async function runPlaylist(gen, reciter) {
     while (live() && ctx.currentTime < t) await new Promise((r) => setTimeout(r, Math.min(250, (t - ctx.currentTime) * 1000)));
     return live();
   };
+  // en pause, on n'entame pas le verset suivant
+  const unpaused = async () => {
+    while (live() && player.paused) await new Promise((r) => setTimeout(r, 150));
+    return live();
+  };
   try { await ctx.resume(); } catch { /* déjà actif */ }
   let t = 0; // fin du verset programmé en dernier (horloge du son)
   const id = SURAH_AUDIO[reciter];
@@ -718,15 +776,18 @@ async function runPlaylist(gen, reciter) {
       if (t && !(await until(t))) return; // un verset lu par l'autre méthode se termine d'abord
       t = 0;
       if (!follow) {
+        if (!(await unpaused())) return;
         if (surahEl.src !== tm.url) surahEl.src = tm.url;
         surahEl.currentTime = span[0];
         try { await surahEl.play(); } catch { showLearnMsg('Récitation introuvable (réseau ?).'); break; }
         if (!live()) { surahEl.pause(); return; }
+        if (player.paused) { player.surahWasPlaying = true; surahEl.pause(); } // pause touchée pendant le démarrage
       }
       showPlaying(x);
       const nx = playlist[playIdx + 1];
       follow = !!(nx && nx.s === x.s && nx.a === x.a + 1 && tm.at[nx.a]); // verset suivant : on laisse lire
       const end = follow ? tm.at[nx.a][0] : span[1];
+      player.cur = { el: surahEl, a: span[0], b: end };
       while (live() && !surahEl.ended && surahEl.currentTime < end) await new Promise((r) => setTimeout(r, 40));
       if (!live()) return;
       if (!follow) surahEl.pause();
@@ -742,6 +803,7 @@ async function runPlaylist(gen, reciter) {
       continue;
     }
     if (!seg) { showLearnMsg('Récitation introuvable (réseau ?).'); break; }
+    if (!(await unpaused())) return;
     const at = Math.max(t ? t + VERSE_GAP : 0, ctx.currentTime + 0.05), len = seg.to - seg.from;
     const src = ctx.createBufferSource(), g = ctx.createGain();
     src.buffer = seg.buf;
@@ -755,6 +817,7 @@ async function runPlaylist(gen, reciter) {
     player.sources.push(src);
     t = at + len;
     if (!(await until(at))) return;
+    player.cur = { at, len };
     showPlaying(x);
     if (!(await until(t - AUDIO_AHEAD))) return;
   }
@@ -767,12 +830,16 @@ function stopAudio() {
   player.sources = [];
   surahEl.pause();
   playlist = [];
+  player.cur = null;
+  if (player.paused) { player.paused = false; if (player.ctx) player.ctx.resume().catch(() => {}); }
+  showPlaybar(false);
   document.querySelectorAll('.ayah.playing, .mw.playing').forEach((el) => el.classList.remove('playing'));
   $('#btn-play').textContent = '▶';
 }
+// ▶ : écouter ; pendant l'écoute ⏸ met en pause, ▶ reprend ; ⏹ (en bas) arrête
 $('#btn-play').addEventListener('click', () => {
-  if (playlist.length) { stopAudio(); return; }
-  play(current.ayahs);
+  if (!playlist.length) { play(current.ayahs); return; }
+  if (player.paused) resumeAudio(); else pauseAudio();
 });
 
 function showLearnMsg(text) {
