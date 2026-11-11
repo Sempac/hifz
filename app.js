@@ -3208,3 +3208,24 @@ async function checkUpdate() {
 }
 setTimeout(checkUpdate, 2000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+
+// ---------- Écran allumé (11/11/2026) ----------
+// L'iPad éteignait l'écran trop vite : tant que l'application est ouverte, l'écran reste allumé ;
+// il peut s'éteindre après 5 min sans toucher l'écran, sauf pendant une écoute ou le micro ouvert.
+const AWAKE_IDLE = 5 * 60 * 1000;
+const awake = { lock: null, last: Date.now() };
+async function keepAwake() {
+  if (!('wakeLock' in navigator) || document.hidden || awake.lock) return;
+  try {
+    awake.lock = await navigator.wakeLock.request('screen');
+    awake.lock.addEventListener('release', () => { awake.lock = null; });
+  } catch { awake.lock = null; } // refusé (économie d'énergie) : l'écran suit le réglage de l'appareil
+}
+function awakeBusy() { return (playlist.length && !player.paused) || rec.listening; }
+['pointerdown', 'keydown', 'touchstart'].forEach((t) => document.addEventListener(t, () => { awake.last = Date.now(); keepAwake(); }, { passive: true, capture: true }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { awake.last = Date.now(); keepAwake(); } });
+setInterval(() => {
+  if (awakeBusy()) { awake.last = Date.now(); keepAwake(); return; }
+  if (awake.lock && Date.now() - awake.last > AWAKE_IDLE) awake.lock.release().catch(() => {});
+}, 15000);
+keepAwake();
