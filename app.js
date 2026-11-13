@@ -675,6 +675,8 @@ function play(ayahs) {
     // iPhone / iPad : le son de Web Audio (versets enchaînés) est coupé par le bouton silencieux,
     // sauf en mode « lecture » (Safari 17+) ; pendant la récitation, le micro le remet en « auto »
     if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    // le micro resté ouvert devient muet en mode « lecture » : il sera rouvert à neuf à la récitation
+    if (!rec.listening && typeof dropMicStream === 'function') dropMicStream();
     // le lecteur de la sourate n'a le droit de jouer après le téléchargement du minutage que s'il a
     // déjà joué pendant un toucher : on le lance ici une fois sur un silence
     if (!player.surahUnlocked) {

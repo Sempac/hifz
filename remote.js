@@ -57,8 +57,19 @@ registerProcessor('pcm16k', Pcm16k);`;
 // autorisation, et pas de délai de réouverture.
 const mic = { stream: null, ctx: null, sink: null };
 
+// Ferme le micro sans couper la connexion au serveur : ensureMic le rouvrira à neuf.
+function dropMicStream() {
+  if (mic.stream) mic.stream.getTracks().forEach((t) => t.stop());
+  if (mic.ctx) mic.ctx.close().catch(() => {});
+  mic.stream = null; mic.ctx = null; mic.zeros = 0;
+}
+
 async function ensureMic() {
   if (navigator.audioSession) navigator.audioSession.type = 'auto'; // après une écoute en mode « lecture » (iPhone)
+  // iPad (14/11/2026) : après une écoute, le micro resté ouvert n'envoyait plus que du silence absolu
+  // (35 s de zéros, « bloqué sur الم ») ; une piste coupée ou terminée est rouverte
+  const t0 = mic.stream?.getAudioTracks()[0];
+  if (t0 && (t0.readyState === 'ended' || t0.muted)) { window.micLog?.(`micro ${t0.readyState === 'ended' ? 'terminé' : 'coupé'} : rouvert`); dropMicStream(); }
   if (!mic.stream) {
     // son brut : les traitements du navigateur (réduction de bruit, volume automatique) altèrent
     // la voix et faussent la reconnaissance des voyelles. Le micro n'envoie rien pendant un rappel,
@@ -80,7 +91,20 @@ async function ensureMic() {
     const node = new AudioWorkletNode(mic.ctx, 'pcm16k');
     node.port.onmessage = (e) => {
       if (e.data.rate) { window.micLog?.(`cadence réelle du micro ${e.data.rate} Hz (annoncée ${e.data.nominal} Hz)`); sendReport(`Cadence réelle du micro : ${e.data.rate} Hz (annoncée ${e.data.nominal} Hz)`); return; }
-      if (mic.sink) { const b = boosted(e.data); mic.sink(b); coachFrames(b); } };
+      if (!mic.sink) return;
+      // silence absolu (que des zéros) pendant 2 s : le micro est muet (iPad après une écoute) ; on le rouvre
+      if (e.data.every((v) => v === 0)) {
+        mic.zeros = (mic.zeros || 0) + e.data.length;
+        if (mic.zeros >= 32000 && !mic.reopening) {
+          mic.reopening = true;
+          window.micLog?.('micro muet (silence absolu 2 s) : rouvert');
+          sendReport('Micro muet (silence absolu 2 s) : rouvert');
+          dropMicStream();
+          ensureMic().catch(() => {}).finally(() => { mic.reopening = false; });
+          return;
+        }
+      } else mic.zeros = 0;
+      const b = boosted(e.data); mic.sink(b); coachFrames(b); };
     mic.ctx.createMediaStreamSource(mic.stream).connect(node);
   }
   if (mic.ctx.state === 'suspended') await mic.ctx.resume();
@@ -134,10 +158,7 @@ function muted(buf) {
 
 function releaseMic() {
   mic.sink = null;
-  if (mic.stream) mic.stream.getTracks().forEach((t) => t.stop());
-  if (mic.ctx) mic.ctx.close().catch(() => {});
-  mic.stream = null;
-  mic.ctx = null;
+  dropMicStream();
   closeSocket();
   coachReset();
 }
