@@ -58,7 +58,7 @@ function buildMushafPage(n, data, inSel) {
   inner.className = 'minner';
   page.appendChild(inner);
   const body = document.createElement('div');
-  body.className = 'mbody' + (n <= 2 ? ' first' : '');
+  body.className = 'mbody' + (n <= 2 ? ' first' : '') + (mushaf.tajweed ? ' tj' : '');
   const lines = n <= 2 ? 8 : 15;
   const byLine = {};
   for (const w of data.w) (byLine[w[0]] ||= []).push(w);
@@ -174,6 +174,7 @@ async function openMushaf(host, first, last, inSel, startPage, fitHeight) {
   mushaf.flip.loadFromHTML(reversed);
   mushaf.flip.on('flip', (e) => { updateMushafNav(); if (mushaf.onFlip) mushaf.onFlip(mushaf.pages[mushaf.pages.length - 1 - e.data]); });
   addMushafNav(host, book);
+  setMushafBold(host);
 }
 
 // Page suivante (+1) ou précédente (−1) dans l'ordre de lecture
@@ -184,6 +185,16 @@ function mushafStep(d) {
 
 // Glissement du doigt (n'importe quelle vitesse, dès 35 px à l'horizontale) et deux flèches en bas :
 // de gauche à droite ou flèche de gauche = page suivante (livre arabe), l'inverse = page précédente
+// Trait épaissi de la police en couleurs (14/11/2026) : un contour CSS n'agit pas sur une police en
+// couleurs, on grossit donc le dessin avec le filtre #mbold ; rayon ≈ 1,4 % de la taille des lettres,
+// arrondi au pixel de l'écran (au moins 1)
+function setMushafBold(host) {
+  const w = host.querySelector('.mw'), f = document.querySelector('#mbold feMorphology');
+  if (!w || !f) return;
+  const dpr = window.devicePixelRatio || 1;
+  f.setAttribute('radius', Math.max(1, Math.round(parseFloat(getComputedStyle(w).fontSize) * dpr * 0.014)) / dpr);
+}
+
 function addMushafNav(host, book) {
   let t0 = null;
   book.addEventListener('touchstart', (e) => { t0 = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
@@ -197,8 +208,8 @@ function addMushafNav(host, book) {
   if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
   const nav = document.createElement('div');
   nav.className = 'mnav';
-  nav.innerHTML = '<button type="button" class="mnav-next" aria-label="Page suivante">❮</button>'
-    + '<button type="button" class="mnav-prev" aria-label="Page précédente">❯</button>';
+  nav.innerHTML = '<button type="button" class="mnav-next" aria-label="Page suivante"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3v18L4 12z"/></svg></button>'
+    + '<button type="button" class="mnav-prev" aria-label="Page précédente"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v18l13-9z"/></svg></button>';
   nav.querySelector('.mnav-next').addEventListener('click', (e) => { e.stopPropagation(); mushafStep(1); });
   nav.querySelector('.mnav-prev').addEventListener('click', (e) => { e.stopPropagation(); mushafStep(-1); });
   host.appendChild(nav);
