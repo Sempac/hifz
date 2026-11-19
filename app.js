@@ -2487,6 +2487,15 @@ function checkReplay(st, final) {
     if (missing && !final) continue;
     if (settling && (m !== 'bad' || i < rec.lastReplayAt)) continue;
     if (!final && st.pos - 1 - i < (server ? REPLAY_CONFIRM_SERVER : REPLAY_CONFIRM)) continue; // provisoire : pas encore assez sûr
+    // serveur, texte provisoire : la même erreur doit être lue 2 fois de suite (le morceau a grandi entre
+    // les deux) ; 14 refus sur 24 étaient décidés sur un morceau à moitié entendu (« ذَٰلِكَ » lu « تالك »,
+    // 19/11/2026). Le texte définitif décide sans attendre.
+    if (server && !final) {
+      const key = errorKind(st, i) + '|' + (st.heard[i] || []).join(' ') + '|' + String(st.vow[i] || '') + '|' + [].concat(st.ins[i] || []).join(' ');
+      const p = (rec.provSeen ||= {})[i];
+      if (!p || p.key !== key) { rec.provSeen[i] = { key, n: 1 }; continue; }
+      if (++p.n < 2) continue;
+    }
     replayAt(i, final);
     return true;
   }
@@ -2497,6 +2506,7 @@ function replayAt(i, final = true) {
   rec.lastReplayAt = i;
   rec.pausing = true;
   rec.retries[i] = (rec.retries[i] || 0) + 1;
+  rec.provSeen = {};
   rec.firstErr[i] ||= errorKind(rec.shown, i); // pour le bilan, même si le mot est retrouvé ensuite
   // chaque rappel part dans le journal du serveur (diagnostic) : mot, raison, retard (04/11/2026)
   if (rec.engine === 'server') {
