@@ -738,3 +738,14 @@ body {
 .cart.changed { animation: cart-flash 1.6s ease-out; }
 @keyframes cart-flash { 0%, 40% { background: var(--gold); color: var(--page); transform: scale(1.15); } 100% { transform: none; } }
 .rub-head { text-align: center; margin: 6px 0; font-size: .95rem; color: var(--gold); font-family: "Amiri Quran", serif; }
+
+/* Appui long sur un verset (v98) : pas de menu du navigateur, fenêtre de lecture */
+.mw, .ayah { -webkit-touch-callout: none; }
+.ps-ends { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.ps-verse { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.ps-verse input { width: 4.5em; font: inherit; padding: 8px; border: 1px solid #aaa; border-radius: 8px; background: var(--surface); color: inherit; }
+#play-sheet .btn { width: 100%; margin-bottom: 8px; }
+#play-sheet .ps-ends .btn { margin-bottom: 0; }
+#play-sheet .ps-verse .btn { width: auto; margin-bottom: 0; }
+.end-banner { position: fixed; left: 8px; right: 8px; top: calc(env(safe-area-inset-top) + 8px); z-index: 12; display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 12px; border-radius: 12px; background: var(--accent); color: var(--accent-text); box-shadow: 0 4px 14px rgb(0 0 0 / .3); }
+.end-banner .btn { flex: none; }

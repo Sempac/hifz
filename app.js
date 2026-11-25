@@ -460,7 +460,6 @@ function openLearn(startPage, replace = false) {
     span.className = 'ayah';
     span.dataset.k = ayahKey(x);
     span.innerHTML = `${ayahText(x)} <span class="mark">﴿${arNum(x.a)}﴾</span> `;
-    span.addEventListener('click', () => play([x]));
     box.appendChild(span);
   }
   go('learn', replace);
@@ -555,13 +554,107 @@ $('#btn-view').addEventListener('click', () => {
   applyLearnView();
 });
 
-// Toucher un mot du livre : écouter son verset
-$('#learn-book').addEventListener('click', (e) => {
-  const w = e.target.closest('.mw');
-  if (!w || w.classList.contains('out')) return;
-  const x = current.ayahs.find((y) => ayahKey(y) === w.dataset.k);
-  if (x) play([x]);
+// Écouter : appui long sur un verset (un simple toucher ne lit plus rien, 25/11/2026 : on lançait la lecture
+// par erreur). La fenêtre propose : ce verset, ou d'ici jusqu'à la fin de la page / du quart / du demi-hizb /
+// du hizb / de la sourate / d'un verset choisi (saisi, ou touché ensuite).
+const LONGPRESS_MS = 500;
+const lp = { timer: 0, x: 0, y: 0, fired: 0, from: null, pick: null };
+
+// versets de (s1, a1) à (s2, a2) inclus, d'une sourate à l'autre
+function ayahRange(s1, a1, s2, a2) {
+  const out = [];
+  for (let s = s1; s <= s2; s++) {
+    for (let a = s === s1 ? a1 : 1; a <= (s === s2 ? a2 : QURAN[s - 1].a.length); a++) out.push({ s, a });
+  }
+  return out;
+}
+
+// dernier verset du même groupe (page, quart…) que le verset de départ
+function groupEnd(from, key) {
+  let { s, a } = from;
+  const g = key(s, a);
+  for (;;) {
+    const ns = a < QURAN[s - 1].a.length ? s : s + 1, na = ns === s ? a + 1 : 1;
+    if (ns > 114 || key(ns, na) !== g) return { s, a };
+    s = ns; a = na;
+  }
+}
+
+const GROUPS = [
+  ['la fin de la page', (s, a) => QURAN[s - 1].p[a - 1]],
+  ['la fin du ¼ de hizb', (s, a) => QURAN[s - 1].q[a - 1]],
+  ['la fin du ½ hizb', (s, a) => Math.ceil(QURAN[s - 1].q[a - 1] / 2)],
+  ['la fin du hizb', (s, a) => Math.ceil(QURAN[s - 1].q[a - 1] / 4)],
+  ['la fin de la sourate', (s) => s],
+];
+
+function playFromTo(from, to) {
+  $('#play-sheet').hidden = true;
+  $('#end-banner').hidden = true;
+  lp.pick = null;
+  play(ayahRange(from.s, from.a, to.s, to.a));
+}
+
+function openPlaySheet(s, a) {
+  lp.from = { s, a };
+  $('#ps-title').textContent = `${QURAN[s - 1].name} : ${a}`;
+  $('#ps-s').value = s;
+  $('#ps-a').value = a;
+  $('#ps-err').hidden = true;
+  $('#ps-ends').innerHTML = '';
+  for (const [label, key] of GROUPS) {
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = label;
+    b.addEventListener('click', () => playFromTo(lp.from, groupEnd(lp.from, key)));
+    $('#ps-ends').appendChild(b);
+  }
+  $('#play-sheet').hidden = false;
+}
+
+$('#ps-one').addEventListener('click', () => playFromTo(lp.from, lp.from));
+$('#ps-go').addEventListener('click', () => {
+  const s = Math.min(114, Math.max(1, parseInt($('#ps-s').value, 10) || lp.from.s));
+  const a = Math.min(QURAN[s - 1].a.length, Math.max(1, parseInt($('#ps-a').value, 10) || 1));
+  if (s < lp.from.s || (s === lp.from.s && a < lp.from.a)) { $('#ps-err').hidden = false; return; }
+  $('#ps-err').hidden = true;
+  playFromTo(lp.from, { s, a });
 });
+$('#ps-pick').addEventListener('click', () => {
+  lp.pick = lp.from;
+  $('#play-sheet').hidden = true;
+  $('#end-msg').textContent = `Touche le verset de fin (après le verset ${lp.from.s}:${lp.from.a})`;
+  $('#end-banner').hidden = false;
+});
+$('#end-cancel').addEventListener('click', () => { lp.pick = null; $('#end-banner').hidden = true; });
+
+const verseOf = (el) => {
+  const t = el.closest?.('#learn-book .mw:not(.out), #learn-text .ayah');
+  return t && t.dataset.k ? t.dataset.k.split(':').map(Number) : null;
+};
+const lpCancel = () => { clearTimeout(lp.timer); lp.timer = 0; };
+document.addEventListener('pointerdown', (e) => {
+  lpCancel();
+  const v = verseOf(e.target);
+  if (!v || lp.pick || e.button > 0) return;
+  lp.x = e.clientX; lp.y = e.clientY;
+  lp.timer = setTimeout(() => { lp.timer = 0; lp.fired = Date.now(); openPlaySheet(v[0], v[1]); }, LONGPRESS_MS);
+}, true);
+document.addEventListener('pointermove', (e) => { if (lp.timer && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) lpCancel(); }, true);
+['pointerup', 'pointercancel', 'scroll'].forEach((t) => document.addEventListener(t, lpCancel, true));
+// le menu du navigateur (appui long) ne s'ouvre pas sur les versets
+document.addEventListener('contextmenu', (e) => { if (verseOf(e.target)) e.preventDefault(); }, true);
+// verset de fin touché (après « Choisir en touchant ») ; le relâchement d'un appui long n'est pas un toucher
+document.addEventListener('click', (e) => {
+  if (Date.now() - lp.fired < 600) { e.stopPropagation(); e.preventDefault(); return; }
+  if (!lp.pick) return;
+  const v = verseOf(e.target);
+  if (!v) return;
+  e.stopPropagation(); e.preventDefault();
+  const [s, a] = v;
+  if (s < lp.pick.s || (s === lp.pick.s && a < lp.pick.a)) { $('#end-msg').textContent = 'Le verset de fin doit être après le début : touche-en un autre'; return; }
+  playFromTo(lp.pick, { s, a });
+}, true);
 
 // Lecture continue (06/11/2026, demande utilisateur : « on sent une coupure entre les versets ») :
 // un fichier par verset, mais le suivant est téléchargé et décodé pendant la lecture du verset en
