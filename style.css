@@ -11,6 +11,7 @@
   --bad-bg: #fde8e8;
   --hint: #b26a00;
   --hint-bg: #fff3dc;
+  --play-bg: rgb(235 170 30 / .26); /* verset lu : translucide, le trait des lignes voisines reste visible */
   --hidden: #d9d4c7;
   --current: #0f5132;
 }
@@ -168,7 +169,7 @@ body {
   overflow-wrap: break-word;
 }
 .ayah { cursor: pointer; border-radius: 6px; padding: 0 2px; }
-.ayah.playing { background: var(--hint-bg); }
+.ayah.playing { background: var(--play-bg); }
 .mark { color: var(--accent); font-size: .85em; margin: 0 4px; white-space: nowrap; }
 .tip { color: var(--muted); font-size: .85rem; text-align: center; margin: 0 16px 16px; }
 
@@ -596,7 +597,7 @@ body {
 
 .mw { border-radius: 4px; cursor: pointer; }
 .mw.out { opacity: .3; cursor: default; }
-.mw.playing { background: var(--hint-bg); }
+.mw.playing { background: var(--play-bg); }
 .mw.recording { background: var(--bad-bg); }
 .mline.head { justify-content: center; }
 /* titre de sourate : bandeau orné sur toute la largeur, nom dans un cartouche au centre */
